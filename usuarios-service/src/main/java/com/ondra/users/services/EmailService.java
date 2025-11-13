@@ -43,7 +43,7 @@ public class EmailService {
         try {
             log.debug("Preparando email de verificación para: {}", destinatario);
 
-            String enlaceVerificacion = frontendUrl + "/api/usuarios/verificar-email?token=" + tokenVerificacion;
+            String enlaceVerificacion = frontendUrl + "/login?token=" + tokenVerificacion;
             String htmlContent = construirMensajeVerificacionHTML(nombreUsuario, enlaceVerificacion);
 
             MimeMessage mensaje = mailSender.createMimeMessage();
@@ -65,17 +65,17 @@ public class EmailService {
 
     /**
      * Envía un correo de recuperación de contraseña con código de 6 dígitos.
+     * Solo envía el código, sin enlace con token.
      *
      * @param destinatario Email del usuario
+     * @param nombreUsuario Nombre del usuario
      * @param codigoVerificacion Código de 6 dígitos
-     * @param tokenRecuperacion Token único de recuperación para el enlace
      */
-    public void enviarEmailRecuperacionConCodigo(String destinatario, String codigoVerificacion, String tokenRecuperacion) {
+    public void enviarEmailRecuperacion(String destinatario, String nombreUsuario, String codigoVerificacion) {
         try {
             log.debug("Preparando email de recuperación con código para: {}", destinatario);
 
-            String enlaceRecuperacion = frontendUrl + "/api/usuarios/restablecer-password?token=" + tokenRecuperacion;
-            String htmlContent = construirMensajeRecuperacionConCodigo(codigoVerificacion, enlaceRecuperacion);
+            String htmlContent = construirMensajeRecuperacionConCodigo(nombreUsuario, codigoVerificacion);
 
             MimeMessage mensaje = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mensaje, true, "UTF-8");
@@ -212,102 +212,132 @@ public class EmailService {
     /**
      * Construye el mensaje HTML de recuperación con código de 6 dígitos.
      */
-    private String construirMensajeRecuperacionConCodigo(String codigoVerificacion, String enlaceRecuperacion) {
+    private String construirMensajeRecuperacionConCodigo(String nombreUsuario, String codigoVerificacion) {
         // Convertir el código en dígitos individuales
         StringBuilder digitosHTML = new StringBuilder();
         for (char digito : codigoVerificacion.toCharArray()) {
             digitosHTML.append(String.format("""
-                <td style="width: 40px; height: 40px; background-color: #eeeeee;
-                           text-align: center; vertical-align: middle;
-                           font-size: 24px; font-family: monospace;
-                           border-radius: 4px;">%c</td>
-                """, digito));
+            <td style="width: 50px; height: 60px; background-color: #f0f0f0;
+                       text-align: center; vertical-align: middle;
+                       font-size: 32px; font-weight: bold; font-family: monospace;
+                       border: 2px solid #dddddd; border-radius: 8px;">%c</td>
+            """, digito));
         }
 
         return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Recuperación de contraseña</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #f5f5f5;">
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%%">
-                <tr>
-                    <td align="center" style="padding: 40px 0;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" width="600" 
-                               style="background-color: #ffffff; padding: 40px; border-radius: 8px; font-family: sans-serif;">
-
-                            <!-- Logo -->
-                            <tr>
-                                <td align="center" style="padding-bottom: 30px;">
-                                    <img src="https://res.cloudinary.com/dh6w4hrx7/image/upload/v1759866494/logo_ondra_lqo3lv.jpg" 
-                                         alt="OndraSounds Logo" width="600"
-                                         style="display: block; width: 100%%; max-width: 600px; height: auto;">
-                                </td>
-                            </tr>
-
-                            <!-- Título -->
-                            <tr>
-                                <td align="center" style="font-size: 24px; font-weight: bold; color: #333333;">
-                                    Recupera tu contraseña
-                                </td>
-                            </tr>
-
-                            <!-- Subtítulo -->
-                            <tr>
-                                <td align="center" style="padding: 20px 0; font-size: 16px; color: #555555;">
-                                    Ingresa el siguiente código para continuar con el proceso de recuperación:
-                                </td>
-                            </tr>
-
-                            <!-- Código de 6 dígitos -->
-                            <tr>
-                                <td align="center">
-                                    <table role="presentation" border="0" cellpadding="0" cellspacing="10" align="center">
-                                        <tr>
-                                            %s
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <!-- Botón -->
-                            <tr>
-                                <td align="center" style="padding: 30px 0;">
-                                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center">
-                                        <tr>
-                                            <td align="center">
-                                                <a href="%s"
-                                                   style="display: inline-block;
-                                                          padding: 12px 24px;
-                                                          background-color: #000000;
-                                                          color: #ffffff;
-                                                          text-decoration: none;
-                                                          border-radius: 5px;
-                                                          font-size: 18px;
-                                                          font-family: sans-serif;">
-                                                    Cambiar contraseña
-                                                </a>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <!-- Nota -->
-                            <tr>
-                                <td align="center" style="font-size: 14px; color: #999999;">
-                                    Si no solicitaste este cambio, puedes ignorar este correo.
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
-        """.formatted(digitosHTML.toString(), enlaceRecuperacion);
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Recuperación de contraseña</title>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Arial, sans-serif;">
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%%">
+                    <tr>
+                        <td align="center" style="padding: 40px 20px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" width="600" 
+                                   style="background-color: #ffffff; padding: 40px; border-radius: 12px; 
+                                          box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        
+                                <!-- Logo -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 30px;">
+                                        <img src="https://res.cloudinary.com/dh6w4hrx7/image/upload/v1759866494/logo_ondra_lqo3lv.jpg" 
+                                             alt="OndraSounds Logo" width="600"
+                                             style="display: block; width: 100%%; max-width: 600px; height: auto;">
+                                    </td>
+                                </tr>
+        
+                                <!-- Título -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 10px;">
+                                        <h1 style="margin: 0; font-size: 28px; font-weight: bold; color: #333333;">
+                                            ¡Hola, %s!
+                                        </h1>
+                                    </td>
+                                </tr>
+        
+                                <!-- Subtítulo -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 30px;">
+                                        <p style="margin: 0; font-size: 16px; color: #666666; line-height: 1.5;">
+                                            Recibimos una solicitud para restablecer la contraseña de tu cuenta.
+                                        </p>
+                                    </td>
+                                </tr>
+        
+                                <!-- Instrucción -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 20px;">
+                                        <p style="margin: 0; font-size: 16px; color: #333333; font-weight: 600;">
+                                            Introduce este código en la aplicación:
+                                        </p>
+                                    </td>
+                                </tr>
+        
+                                <!-- Código de 6 dígitos -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 30px;">
+                                        <table role="presentation" border="0" cellpadding="0" cellspacing="8" align="center">
+                                            <tr>
+                                                %s
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+        
+                                <!-- Información de expiración -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 20px;">
+                                        <div style="background-color: #fff3cd; border: 1px solid #ffc107; 
+                                                    border-radius: 8px; padding: 15px; margin: 0 20px;">
+                                            <p style="margin: 0; font-size: 14px; color: #856404;">
+                                                ⏰ <strong>Este código expira en 1 hora</strong>
+                                            </p>
+                                        </div>
+                                    </td>
+                                </tr>
+        
+                                <!-- Separador -->
+                                <tr>
+                                    <td style="padding: 20px 0;">
+                                        <div style="border-top: 1px solid #eeeeee;"></div>
+                                    </td>
+                                </tr>
+        
+                                <!-- Nota de seguridad -->
+                                <tr>
+                                    <td style="padding: 0 20px;">
+                                        <p style="margin: 0 0 10px 0; font-size: 14px; color: #666666; line-height: 1.5;">
+                                            <strong>¿No solicitaste este cambio?</strong>
+                                        </p>
+                                        <p style="margin: 0; font-size: 14px; color: #666666; line-height: 1.5;">
+                                            Si no fuiste tú quien solicitó restablecer la contraseña, 
+                                            ignora este correo y tu cuenta permanecerá segura. 
+                                            Nadie podrá cambiar tu contraseña sin este código.
+                                        </p>
+                                    </td>
+                                </tr>
+        
+                                <!-- Footer -->
+                                <tr>
+                                    <td align="center" style="padding-top: 30px;">
+                                        <p style="margin: 0; font-size: 12px; color: #999999;">
+                                            Este es un correo automático, por favor no respondas a este mensaje.
+                                        </p>
+                                        <p style="margin: 10px 0 0 0; font-size: 12px; color: #999999;">
+                                            © 2025 OndraSounds - Desarrollado por GC03
+                                        </p>
+                                    </td>
+                                </tr>
+        
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+            """.formatted(nombreUsuario, digitosHTML.toString());
     }
 
     /**

@@ -73,7 +73,7 @@ public class Usuario {
      */
     @Builder.Default
     @Column(name = "foto_perfil")
-    private String fotoPerfil = "https://res.cloudinary.com/dh6w4hrx7/image/upload/v1759851594/default_a2dgyj.webp";
+    private String fotoPerfil = null;
 
     /**
      * Fecha de registro del usuario.
@@ -116,9 +116,6 @@ public class Usuario {
 
     @Column(name = "fecha_expiracion_token")
     private LocalDateTime fechaExpiracionToken;
-
-    @Column(name = "token_recuperacion", unique = true)
-    private String tokenRecuperacion;
 
     @Column(name = "fecha_expiracion_token_recuperacion")
     private LocalDateTime fechaExpiracionTokenRecuperacion;

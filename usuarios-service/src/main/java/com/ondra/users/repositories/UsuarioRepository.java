@@ -41,13 +41,10 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
     Optional<Usuario> findByTokenVerificacion(String tokenVerificacion);
 
-    Optional<Usuario> findByTokenRecuperacion(String token);
-
     Optional<Usuario> findByCodigoRecuperacion(String codigoRecuperacion);
 
     List<Usuario> findByActivoTrueAndEmailVerificadoFalseAndFechaRegistroBefore(LocalDateTime fecha);
 
     List<Usuario> findByTokenVerificacionIsNotNullAndFechaExpiracionTokenBefore(LocalDateTime fecha);
 
-    List<Usuario> findByTokenRecuperacionIsNotNullAndFechaExpiracionTokenRecuperacionBefore(LocalDateTime fecha);
 }

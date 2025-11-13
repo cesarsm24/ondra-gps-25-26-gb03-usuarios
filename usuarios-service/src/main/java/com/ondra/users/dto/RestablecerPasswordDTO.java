@@ -1,5 +1,6 @@
 package com.ondra.users.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -7,8 +8,10 @@ import lombok.Data;
 
 @Data
 public class RestablecerPasswordDTO {
-    @NotBlank(message = "El token es obligatorio")
-    private String token;
+
+    @NotBlank(message = "El email es obligatorio")
+    @Email(message = "Email inválido")
+    private String emailUsuario;
 
     @NotBlank(message = "El código de verificación es obligatorio")
     @Pattern(regexp = "\\d{6}", message = "El código debe tener 6 dígitos")
