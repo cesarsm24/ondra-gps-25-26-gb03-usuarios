@@ -210,6 +210,20 @@ public class GlobalExceptionHandler {
         );
     }
 
+    /**
+     * Maneja excepciones cuando no se encuentra una red social.
+     * <p>Código de error: SOCIAL_NETWORK_NOT_FOUND | HTTP 404</p>
+     */
+    @ExceptionHandler(RedSocialNotFoundException.class)
+    public ResponseEntity<ErrorDTO> handleRedSocialNotFound(RedSocialNotFoundException ex) {
+        return createErrorResponse(
+                "SOCIAL_NETWORK_NOT_FOUND",
+                ex.getMessage(),
+                HttpStatus.NOT_FOUND,
+                false
+        );
+    }
+
     // ==================== EXCEPCIONES DE PERMISOS ====================
 
     /**
@@ -238,6 +252,34 @@ public class GlobalExceptionHandler {
                 "INVALID_DATA",
                 ex.getMessage(),
                 HttpStatus.BAD_REQUEST,
+                false
+        );
+    }
+
+    /**
+     * Maneja excepciones cuando una red social no pertenece al artista especificado.
+     * <p>Código de error: SOCIAL_NETWORK_MISMATCH | HTTP 400</p>
+     */
+    @ExceptionHandler(SocialNetworkMismatchException.class)
+    public ResponseEntity<ErrorDTO> handleSocialNetworkMismatch(SocialNetworkMismatchException ex) {
+        return createErrorResponse(
+                "SOCIAL_NETWORK_MISMATCH",
+                ex.getMessage(),
+                HttpStatus.BAD_REQUEST,
+                false
+        );
+    }
+
+    /**
+     * Maneja excepciones cuando se intenta crear una red social duplicada.
+     * <p>Código de error: DUPLICATE_SOCIAL_NETWORK | HTTP 409</p>
+     */
+    @ExceptionHandler(DuplicateSocialNetworkException.class)
+    public ResponseEntity<ErrorDTO> handleDuplicateSocialNetwork(DuplicateSocialNetworkException ex) {
+        return createErrorResponse(
+                "DUPLICATE_SOCIAL_NETWORK",
+                ex.getMessage(),
+                HttpStatus.CONFLICT,
                 false
         );
     }
