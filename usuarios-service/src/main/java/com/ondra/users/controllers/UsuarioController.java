@@ -152,4 +152,83 @@ public class UsuarioController {
         usuarioService.restablecerPassword(dto);
         return ResponseEntity.ok("Contraseña restablecida correctamente");
     }
+
+    // ============================================
+    // ENDPOINTS CON {id} VAN AL FINAL
+    // ============================================
+
+    /**
+     * Obtiene el perfil de un usuario por su ID.
+     * Requiere autenticación JWT.
+     * Solo puedes obtener tu propio perfil.
+     *
+     * @param id identificador del usuario solicitado
+     * @param authentication Objeto de autenticación de Spring Security
+     * @return objeto {@link UsuarioDTO} con los datos del usuario
+     */
+    @GetMapping(value = "/usuarios/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<UsuarioDTO> obtenerUsuario(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long authenticatedUserId = Long.parseLong(authentication.getName());
+        UsuarioDTO usuario = usuarioService.obtenerUsuario(id, authenticatedUserId);
+        return ResponseEntity.ok(usuario);
+    }
+
+    /**
+     * Actualiza los datos del perfil de un usuario.
+     * Requiere autenticación JWT.
+     * Solo el propietario puede editar su perfil.
+     *
+     * @param id identificador del usuario a editar
+     * @param editarDTO datos a actualizar
+     * @param authentication Objeto de autenticación de Spring Security
+     * @return objeto {@link UsuarioDTO} con los datos actualizados
+     */
+    @PutMapping(value = "/usuarios/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<UsuarioDTO> editarUsuario(
+            @PathVariable Long id,
+            @Valid @RequestBody EditarUsuarioDTO editarDTO,
+            Authentication authentication) {
+        Long authenticatedUserId = Long.parseLong(authentication.getName());
+        UsuarioDTO usuario = usuarioService.editarUsuario(id, editarDTO, authenticatedUserId);
+        return ResponseEntity.ok(usuario);
+    }
+
+    /**
+     * Cambia la contraseña de un usuario autenticado.
+     * Requiere autenticación JWT.
+     *
+     * @param id identificador del usuario
+     * @param dto contiene la contraseña actual y la nueva
+     * @param authentication Objeto de autenticación de Spring Security
+     * @return mensaje de confirmación
+     */
+    @PutMapping("/usuarios/{id}/cambiar-password")
+    public ResponseEntity<String> cambiarPassword(
+            @PathVariable Long id,
+            @Valid @RequestBody CambiarPasswordDTO dto,
+            Authentication authentication) {
+        Long authenticatedUserId = Long.parseLong(authentication.getName());
+        usuarioService.cambiarPassword(id, dto, authenticatedUserId);
+        return ResponseEntity.ok("Contraseña cambiada correctamente");
+    }
+
+    /**
+     * Elimina o desactiva la cuenta de un usuario.
+     * Requiere autenticación JWT.
+     * Solo el propietario puede eliminar su cuenta.
+     *
+     * @param id identificador del usuario a eliminar
+     * @param authentication Objeto de autenticación de Spring Security
+     * @return respuesta vacía con código 200
+     */
+    @DeleteMapping("/usuarios/{id}")
+    public ResponseEntity<Void> eliminarUsuario(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long authenticatedUserId = Long.parseLong(authentication.getName());
+        usuarioService.eliminarUsuario(id, authenticatedUserId);
+        return ResponseEntity.ok().build();
+    }
 }

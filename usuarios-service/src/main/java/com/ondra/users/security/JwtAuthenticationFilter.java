@@ -23,7 +23,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Filtro de autenticación JWT que valida tokens en cada petición.
@@ -34,6 +36,7 @@ import java.util.Collections;
  *
  * <p><strong>Funcionamiento:</strong></p>
  * <ol>
+ *   <li>Verifica si el endpoint es público (no requiere autenticación)</li>
  *   <li>Extrae el token del header Authorization (formato: "Bearer {token}")</li>
  *   <li>Valida el token JWT (firma, expiración, estructura)</li>
  *   <li>Extrae el userId del token y lo establece como nombre de usuario en Spring Security</li>
@@ -51,6 +54,67 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Value("${jwt.secret}")
     private String secretKey;
+
+    // Lista de endpoints públicos que NO requieren validación JWT
+    private static final List<String> PUBLIC_ENDPOINTS = Arrays.asList(
+            "/api/usuarios/login",
+            "/api/usuarios/login/google",
+            "/api/usuarios/refresh",
+            "/api/usuarios/logout",
+            "/api/usuarios/recuperar-password",
+            "/api/usuarios/restablecer-password",
+            "/api/usuarios/verificar-email",
+            "/api/usuarios/reenviar-verificacion",
+            "/actuator/health"
+    );
+
+    /**
+     * Determina si este filtro debe ejecutarse para la petición dada.
+     * Retorna false para endpoints públicos (los salta).
+     *
+     * @param request Petición HTTP
+     * @return false si es un endpoint público, true si debe validar JWT
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+
+        // Permitir peticiones OPTIONS (preflight CORS) sin validación
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            log.debug("Petición OPTIONS permitida sin JWT: {}", path);
+            return true;
+        }
+
+        // Si el path es /api/usuarios y el método es POST, es el registro (público)
+        if ("/api/usuarios".equals(path) && "POST".equalsIgnoreCase(method)) {
+            log.debug("Registro de usuario (POST /api/usuarios) - no requiere JWT");
+            return true;
+        }
+
+        // Verificar endpoints públicos exactos
+        for (String publicEndpoint : PUBLIC_ENDPOINTS) {
+            if (path.equals(publicEndpoint)) {
+                log.debug("Endpoint público: {} - no requiere JWT", path);
+                return true;
+            }
+        }
+
+        // Verificar rutas públicas con patrones
+        if (path.startsWith("/api/artistas") && "GET".equalsIgnoreCase(method)) {
+            log.debug("Consulta pública de artistas - no requiere JWT");
+            return true;
+        }
+
+        if (path.startsWith("/api/seguimientos/") && "GET".equalsIgnoreCase(method)) {
+            log.debug("Consulta pública de seguimientos - no requiere JWT");
+            return true;
+        }
+
+        // Este endpoint requiere validación JWT
+        log.debug("Endpoint protegido: {} - requiere JWT", path);
+        return false;
+    }
 
     /**
      * Método principal del filtro que se ejecuta en cada petición.
@@ -80,7 +144,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         new UsernamePasswordAuthenticationToken(
                                 userId, // El userId se establece como "name" del Authentication
                                 null,
-                                Collections.emptyList() // Sin roles por ahora
+                                Collections.emptyList()
                         );
 
                 authentication.setDetails(
@@ -91,35 +155,43 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
                 log.debug("Usuario ID: {} autenticado correctamente", userId);
+            } else {
+                log.debug("No se encontró token JWT en la petición a: {}", request.getRequestURI());
             }
         } catch (ExpiredJwtException e) {
             log.warn("Token JWT expirado: {}", e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"TOKEN_EXPIRED\",\"message\":\"El token ha expirado\"}");
             return;
         } catch (SignatureException e) {
             log.warn("Firma JWT inválida: {}", e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"INVALID_TOKEN\",\"message\":\"Token inválido\"}");
             return;
         } catch (MalformedJwtException e) {
             log.warn("Token JWT malformado: {}", e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"MALFORMED_TOKEN\",\"message\":\"Token malformado\"}");
             return;
         } catch (UnsupportedJwtException e) {
             log.warn("Token JWT no soportado: {}", e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"UNSUPPORTED_TOKEN\",\"message\":\"Token no soportado\"}");
             return;
         } catch (IllegalArgumentException e) {
             log.warn("Claims JWT vacíos: {}", e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"INVALID_TOKEN\",\"message\":\"Token inválido\"}");
             return;
         } catch (Exception e) {
             log.error("Error inesperado al validar JWT: {}", e.getMessage(), e);
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"INTERNAL_ERROR\",\"message\":\"Error al procesar el token\"}");
             return;
         }
@@ -138,7 +210,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader("Authorization");
 
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7); // Eliminar "Bearer "
+            return bearerToken.substring(7);
         }
 
         return null;

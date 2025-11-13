@@ -1,14 +1,21 @@
 package com.ondra.users.services;
 
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.FirebaseToken;
+
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
+import java.util.Collections;
+
+import com.ondra.users.clients.ContenidosClient;
+import com.ondra.users.clients.RecomendacionesClient;
 import com.ondra.users.dto.*;
-import com.ondra.users.security.JwtService;
 import com.ondra.users.exceptions.*;
 import com.ondra.users.models.dao.*;
 import com.ondra.users.models.enums.TipoUsuario;
 import com.ondra.users.repositories.*;
+import com.ondra.users.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
@@ -27,10 +33,16 @@ import java.util.UUID;
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
-    private final FirebaseAuth firebaseAuth;
+    private final SeguimientoRepository seguimientoRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final FirebaseAuth firebaseAuth;
+    private final CloudinaryService cloudinaryService;
     private final EmailService emailService;
+
+    // Clientes para comunicación con otros microservicios
+    private final ContenidosClient contenidosClient;
+    private final RecomendacionesClient recomendacionesClient;
 
     /**
      * Registra un nuevo usuario en el sistema con email y contraseña.
@@ -151,26 +163,6 @@ public class UsuarioService {
     }
 
     /**
-     * Convierte una entidad Usuario a UsuarioDTO.
-     *
-     * @param usuario Entidad Usuario
-     * @return UsuarioDTO
-     */
-    private UsuarioDTO convertirAUsuarioDTO(Usuario usuario) {
-        return UsuarioDTO.builder()
-                .idUsuario(usuario.getIdUsuario())
-                .emailUsuario(usuario.getEmailUsuario())
-                .nombreUsuario(usuario.getNombreUsuario())
-                .apellidosUsuario(usuario.getApellidosUsuario())
-                .tipoUsuario(usuario.getTipoUsuario())
-                .fotoPerfil(usuario.getFotoPerfil())
-                .activo(usuario.isActivo())
-                .permiteGoogle(usuario.isPermiteGoogle())
-                .emailVerificado(usuario.isEmailVerificado())
-                .build();
-    }
-
-    /**
      * Autentica un usuario con email y contraseña, retornando JWT y refresh token.
      * SOLO permite login si el email ha sido verificado.
      *
@@ -227,7 +219,8 @@ public class UsuarioService {
     }
 
     /**
-     * Autentica o registra un usuario mediante token de Google/Firebase.
+     * Autentica o registra un usuario mediante token de Google OAuth.
+     * Valida tokens de Google Sign-In directamente sin necesidad de Firebase.
      * Los usuarios de Google NO necesitan verificación de email (Google ya lo verifica).
      *
      * @param loginGoogleDTO Token de autenticación de Google
@@ -235,19 +228,54 @@ public class UsuarioService {
      */
     @Transactional
     public AuthResponseDTO loginGoogle(LoginGoogleDTO loginGoogleDTO) {
-        FirebaseToken decodedToken;
+        String email;
+        String nombre;
+        String googleUid;
+        String fotoPerfil = null;
 
         try {
-            decodedToken = firebaseAuth.verifyIdToken(loginGoogleDTO.getIdToken());
-        } catch (FirebaseAuthException e) {
-            log.error("Token de Google inválido: {}", e.getMessage());
+            // Crear verificador de tokens de Google OAuth
+            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
+                    new NetHttpTransport(),
+                    new GsonFactory()
+            )
+                    .setAudience(Collections.singletonList(
+                            "41556010027-4d8rs7q4ueggb72ql3v96maf9hn16cph.apps.googleusercontent.com"
+                    ))
+                    .build();
+
+            // Verificar el token
+            GoogleIdToken idToken = verifier.verify(loginGoogleDTO.getIdToken());
+
+            if (idToken == null) {
+                log.error("Token de Google inválido o expirado");
+                throw new InvalidGoogleTokenException("El token de Google es inválido o ha expirado");
+            }
+
+            // Extraer información del payload
+            GoogleIdToken.Payload payload = idToken.getPayload();
+            googleUid = payload.getSubject(); // Google User ID único
+            email = payload.getEmail();
+            nombre = (String) payload.get("name");
+            fotoPerfil = (String) payload.get("picture");
+
+            // Validar que el email esté verificado por Google
+            Boolean emailVerified = payload.getEmailVerified();
+            if (emailVerified == null || !emailVerified) {
+                log.warn("Intento de login con email no verificado por Google: {}", email);
+                throw new InvalidGoogleTokenException("El email de Google no está verificado");
+            }
+
+            log.info("✅ Token de Google validado exitosamente para: {}", email);
+
+        } catch (InvalidGoogleTokenException e) {
+            throw e; // Re-lanzar excepciones propias
+        } catch (Exception e) {
+            log.error("❌ Error al validar token de Google: {}", e.getMessage(), e);
             throw new InvalidGoogleTokenException("El token de Google es inválido o ha expirado");
         }
 
-        String googleUid = decodedToken.getUid();
-        String email = decodedToken.getEmail();
-        String nombre = decodedToken.getName();
-
+        // Buscar usuario existente por Google UID o email
         Optional<Usuario> usuarioOpt = usuarioRepository.findByGoogleUid(googleUid);
         if (usuarioOpt.isEmpty()) {
             usuarioOpt = usuarioRepository.findByEmailUsuario(email);
@@ -256,26 +284,39 @@ public class UsuarioService {
         Usuario usuario;
 
         if (usuarioOpt.isPresent()) {
+            // Usuario existente
             usuario = usuarioOpt.get();
 
+            // Verificar que la cuenta tenga habilitado login con Google
             if (!usuario.isPermiteGoogle()) {
                 log.warn("Intento de login con Google en cuenta sin permiso. Usuario ID: {}", usuario.getIdUsuario());
                 throw new GoogleLoginDisabledException("Esta cuenta no tiene habilitado el login con Google");
             }
 
+            // Verificar que la cuenta esté activa
             if (!usuario.isActivo()) {
                 log.warn("Intento de login con Google en cuenta inactiva. Usuario ID: {}", usuario.getIdUsuario());
                 throw new AccountInactiveException("La cuenta está inactiva. Contacta con soporte");
             }
 
+            // Vincular Google UID si no está vinculado
             if (usuario.getGoogleUid() == null || usuario.getGoogleUid().isEmpty()) {
                 usuario.setGoogleUid(googleUid);
                 usuario = usuarioRepository.save(usuario);
-                log.info("Google UID vinculado al usuario ID: {}", usuario.getIdUsuario());
+                log.info("🔗 Google UID vinculado al usuario ID: {}", usuario.getIdUsuario());
             }
 
-            log.info("Login con Google exitoso para usuario ID: {}", usuario.getIdUsuario());
+            // Actualizar foto de perfil si es de Google y ha cambiado
+            if (fotoPerfil != null && !fotoPerfil.equals(usuario.getFotoPerfil())) {
+                usuario.setFotoPerfil(fotoPerfil);
+                usuario = usuarioRepository.save(usuario);
+                log.info("📸 Foto de perfil actualizada desde Google para usuario ID: {}", usuario.getIdUsuario());
+            }
+
+            log.info("✅ Login con Google exitoso para usuario ID: {}", usuario.getIdUsuario());
+
         } else {
+            // Nuevo usuario - registrar automáticamente
             String[] nombreCompleto = separarNombreCompleto(nombre);
 
             usuario = Usuario.builder()
@@ -288,13 +329,15 @@ public class UsuarioService {
                     .activo(true)
                     .emailVerificado(true) // Google ya verifica el email
                     .permiteGoogle(true)
-                    .fotoPerfil(decodedToken.getPicture())
+                    .fotoPerfil(fotoPerfil)
                     .build();
 
             usuario = usuarioRepository.save(usuario);
-            log.info("Nuevo usuario registrado vía Google con ID: {} y email: {}", usuario.getIdUsuario(), usuario.getEmailUsuario());
+            log.info("🆕 Nuevo usuario registrado vía Google con ID: {} y email: {}",
+                    usuario.getIdUsuario(), usuario.getEmailUsuario());
         }
 
+        // Generar tokens JWT
         String token = jwtService.generarToken(
                 usuario.getEmailUsuario(),
                 usuario.getIdUsuario(),
@@ -340,32 +383,26 @@ public class UsuarioService {
     }
 
     /**
-     * Separa un nombre completo en nombre y apellidos.
+     * Obtiene el perfil de un usuario.
+     * Solo el propietario puede ver su perfil completo.
      *
-     * @param nombreCompleto Nombre completo
-     * @return Array con [nombre, apellidos]
+     * @param id ID del usuario a obtener
+     * @param authenticatedUserId ID del usuario autenticado
+     * @return UsuarioDTO con los datos del perfil
+     * @throws UsuarioNotFoundException Si el usuario no existe
+     * @throws ForbiddenAccessException Si no es el propietario
      */
-    private String[] separarNombreCompleto(String nombreCompleto) {
-        if (nombreCompleto == null || nombreCompleto.isEmpty()) {
-            return new String[]{"Usuario", ""};
+    @Transactional(readOnly = true)
+    public UsuarioDTO obtenerUsuario(Long id, Long authenticatedUserId) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new UsuarioNotFoundException(id));
+
+        if (!usuario.getIdUsuario().equals(authenticatedUserId)) {
+            log.warn("Usuario ID: {} intentó acceder al perfil del usuario ID: {}", authenticatedUserId, id);
+            throw new ForbiddenAccessException("No tienes permiso para modificar este perfil");
         }
 
-        String[] partes = nombreCompleto.trim().split("\\s+", 2);
-        String nombre = partes[0];
-        String apellidos = partes.length > 1 ? partes[1] : "";
-
-        return new String[]{nombre, apellidos};
-    }
-
-    /**
-     * Genera un código aleatorio de 6 dígitos.
-     *
-     * @return String con 6 dígitos numéricos
-     */
-    private String generarCodigoAleatorio() {
-        Random random = new Random();
-        int codigo = 100000 + random.nextInt(900000); // Rango: 100000-999999
-        return String.valueOf(codigo);
+        return convertirAUsuarioDTO(usuario);
     }
 
     /**
@@ -391,7 +428,109 @@ public class UsuarioService {
     }
 
     /**
-     * Solicita recuperación de contraseña enviando email con código de 6 dígitos y token.
+     * Edita el perfil de un usuario.
+     * Solo el propietario puede editar su perfil.
+     *
+     * @param id ID del usuario a editar
+     * @param editarDTO Datos a actualizar
+     * @param authenticatedUserId ID del usuario autenticado
+     * @return UsuarioDTO actualizado
+     * @throws UsuarioNotFoundException Si el usuario no existe
+     * @throws ForbiddenAccessException Si no es el propietario
+     */
+    @Transactional
+    public UsuarioDTO editarUsuario(Long id, EditarUsuarioDTO editarDTO, Long authenticatedUserId) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new UsuarioNotFoundException(id));
+
+        if (!usuario.getIdUsuario().equals(authenticatedUserId)) {
+            log.warn("Usuario ID: {} intentó editar el perfil del usuario ID: {}", authenticatedUserId, id);
+            throw new ForbiddenAccessException("No tienes permiso para modificar este perfil");
+        }
+
+        if (editarDTO.getNombreUsuario() != null && !editarDTO.getNombreUsuario().isEmpty()) {
+            usuario.setNombreUsuario(editarDTO.getNombreUsuario());
+        }
+
+        if (editarDTO.getApellidosUsuario() != null && !editarDTO.getApellidosUsuario().isEmpty()) {
+            usuario.setApellidosUsuario(editarDTO.getApellidosUsuario());
+        }
+
+        if (editarDTO.getFotoPerfil() != null && !editarDTO.getFotoPerfil().isEmpty()) {
+            String fotoAntigua = usuario.getFotoPerfil();
+
+            if (fotoAntigua != null && !fotoAntigua.isEmpty() &&
+                    !fotoAntigua.contains("googleusercontent.com")) {
+                cloudinaryService.eliminarImagen(fotoAntigua);
+                log.info("Imagen anterior eliminada de Cloudinary: {}", fotoAntigua);
+            }
+
+            usuario.setFotoPerfil(editarDTO.getFotoPerfil());
+        }
+
+        usuario = usuarioRepository.save(usuario);
+        log.info("Usuario ID: {} actualizado exitosamente", id);
+
+        return convertirAUsuarioDTO(usuario);
+    }
+
+    /**
+     * Elimina un usuario (soft delete).
+     * Solo el propietario puede eliminar su cuenta.
+     *
+     * @param id ID del usuario a eliminar
+     * @param authenticatedUserId ID del usuario autenticado
+     * @throws UsuarioNotFoundException Si el usuario no existe
+     * @throws ForbiddenAccessException Si no es el propietario
+     */
+    @Transactional
+    public void eliminarUsuario(Long id, Long authenticatedUserId) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new UsuarioNotFoundException(id));
+
+        if (!usuario.getIdUsuario().equals(authenticatedUserId)) {
+            log.warn("Usuario ID: {} intentó eliminar la cuenta del usuario ID: {}", authenticatedUserId, id);
+            throw new ForbiddenAccessException("No tienes permiso para modificar este perfil");
+        }
+
+        // Eliminar foto de perfil de Cloudinary
+        if (usuario.getFotoPerfil() != null && !usuario.getFotoPerfil().isEmpty() &&
+                !usuario.getFotoPerfil().contains("googleusercontent.com")) {
+            cloudinaryService.eliminarImagen(usuario.getFotoPerfil());
+            log.info("Foto de perfil eliminada de Cloudinary para usuario ID: {}", id);
+        }
+
+        // Eliminar todos los seguimientos relacionados (como seguidor y como seguido)
+        seguimientoRepository.deleteBySeguidorIdUsuarioOrSeguidoIdUsuario(id, id);
+        log.info("Seguimientos eliminados para usuario ID: {}", id);
+
+        // ============================================
+        // LLAMADAS A OTROS MICROSERVICIOS
+        // ============================================
+
+        // Eliminar datos del microservicio de Contenidos
+        log.info("Eliminando datos del usuario en microservicio Contenidos...");
+        contenidosClient.eliminarComprasUsuario(id);
+        contenidosClient.eliminarFavoritosUsuario(id);
+        contenidosClient.eliminarComentariosUsuario(id);
+
+        // Eliminar datos del microservicio de Recomendaciones
+        log.info("Eliminando preferencias en microservicio Recomendaciones...");
+        recomendacionesClient.eliminarPreferenciasUsuario(id);
+
+        // Revocar todos los tokens activos
+        jwtService.revocarTodosLosTokensDelUsuario(id);
+
+        // Desactivar cuenta (soft delete)
+        usuario.setActivo(false);
+        usuarioRepository.save(usuario);
+
+        log.warn("Cuenta de usuario eliminada (soft delete). Usuario ID: {} eliminado por usuario ID: {}", id, authenticatedUserId);
+    }
+
+    /**
+     * Solicita recuperación de contraseña enviando email con código de 6 dígitos.
+     * ACTUALIZADO: Solo genera código, sin token UUID.
      * NO revela si el email existe para prevenir enumeración de usuarios.
      *
      * @param dto Contiene el email del usuario
@@ -419,23 +558,20 @@ public class UsuarioService {
 
         // Generar código de 6 dígitos aleatorio
         String codigoVerificacion = generarCodigoAleatorio();
-
-        // Generar token de recuperación (UUID para el enlace)
-        String tokenRecuperacion = UUID.randomUUID().toString();
         LocalDateTime fechaExpiracion = LocalDateTime.now().plusHours(1); // 1 hora
 
-        // Guardar el código Y el token en la base de datos
+        // Guardar SOLO el código (sin token UUID)
         usuario.setCodigoRecuperacion(codigoVerificacion);
-        usuario.setTokenRecuperacion(tokenRecuperacion);
         usuario.setFechaExpiracionTokenRecuperacion(fechaExpiracion);
+
         usuarioRepository.save(usuario);
 
-        // Enviar email con el código Y el token
+        // Enviar email SOLO con el código
         try {
-            emailService.enviarEmailRecuperacionConCodigo(
+            emailService.enviarEmailRecuperacion(
                     usuario.getEmailUsuario(),
-                    codigoVerificacion,      // Código de 6 dígitos
-                    tokenRecuperacion        // Token para el enlace
+                    usuario.getNombreUsuario(),
+                    codigoVerificacion
             );
             log.info("Email de recuperación enviado a: {}", usuario.getEmailUsuario());
         } catch (Exception e) {
@@ -445,32 +581,36 @@ public class UsuarioService {
     }
 
     /**
-     * Restablece la contraseña usando el token y código recibidos por email.
+     * Restablece la contraseña usando email + código recibidos por email.
+     * ACTUALIZADO: Sin validación de token UUID, solo código.
      * Este endpoint es público (no requiere autenticación).
      *
-     * @param dto Contiene el token, código de 6 dígitos y la nueva contraseña
-     * @throws InvalidPasswordResetTokenException Si el token o código son inválidos o expiraron
+     * @param dto Contiene email, código de 6 dígitos y la nueva contraseña
+     * @throws InvalidPasswordResetTokenException Si el código es inválido o expiró
+     * @throws UsuarioNotFoundException Si el usuario no existe
      */
     @Transactional
     public void restablecerPassword(RestablecerPasswordDTO dto) {
-        Usuario usuario = usuarioRepository.findByTokenRecuperacion(dto.getToken())
+        // Buscar usuario por email
+        Usuario usuario = usuarioRepository.findByEmailUsuario(dto.getEmailUsuario())
                 .orElseThrow(() -> new InvalidPasswordResetTokenException(
-                        "Token de recuperación inválido"
+                        "No se encontró una solicitud de recuperación activa para este email"
                 ));
 
-        // Validar que no haya expirado
-        if (usuario.getFechaExpiracionTokenRecuperacion() == null ||
-                usuario.getFechaExpiracionTokenRecuperacion().isBefore(LocalDateTime.now())) {
-            log.warn("Token de recuperación expirado para usuario ID: {}",
-                    usuario.getIdUsuario());
-            throw new InvalidPasswordResetTokenException("El token ha expirado");
+        // Validar que existe un código de recuperación activo
+        if (usuario.getCodigoRecuperacion() == null || usuario.getCodigoRecuperacion().isEmpty()) {
+            log.warn("No hay código de recuperación activo para usuario ID: {}", usuario.getIdUsuario());
+            throw new InvalidPasswordResetTokenException(
+                    "No hay ninguna solicitud de recuperación activa. Solicita un nuevo código"
+            );
         }
 
         // Validar que el código de 6 dígitos coincida
         if (!dto.getCodigoVerificacion().equals(usuario.getCodigoRecuperacion())) {
-            log.warn("Código de verificación incorrecto para usuario ID: {}",
-                    usuario.getIdUsuario());
-            throw new InvalidPasswordResetTokenException("El código de verificación es incorrecto");
+            log.warn("Código de verificación incorrecto para usuario ID: {}", usuario.getIdUsuario());
+            throw new InvalidPasswordResetTokenException(
+                    "El código de verificación es incorrecto"
+            );
         }
 
         // Validar que la cuenta esté activa
@@ -483,10 +623,9 @@ public class UsuarioService {
         // Actualizar contraseña (hasheada)
         usuario.setPasswordUsuario(passwordEncoder.encode(dto.getNuevaPassword()));
 
-        // Limpiar token Y código usados (evita reutilización)
-        usuario.setTokenRecuperacion(null);
-        usuario.setFechaExpiracionTokenRecuperacion(null);
+        // Limpiar código y contadores de seguridad
         usuario.setCodigoRecuperacion(null);
+        usuario.setFechaExpiracionTokenRecuperacion(null);
 
         usuarioRepository.save(usuario);
 
@@ -504,8 +643,131 @@ public class UsuarioService {
             // No fallar el proceso si el email no se envía
         }
 
-        log.info("Contraseña restablecida exitosamente para usuario ID: {}",
+        log.info("Contraseña restablecida exitosamente para usuario ID: {} usando código de 6 dígitos",
                 usuario.getIdUsuario());
     }
 
+    /**
+     * Cambia la contraseña de un usuario autenticado.
+     * Requiere la contraseña actual para mayor seguridad.
+     *
+     * @param id ID del usuario
+     * @param dto Contiene la contraseña actual y la nueva
+     * @param authenticatedUserId ID del usuario autenticado
+     * @throws UsuarioNotFoundException Si el usuario no existe
+     * @throws ForbiddenAccessException Si intenta cambiar la contraseña de otro usuario
+     * @throws InvalidCredentialsException Si la contraseña actual es incorrecta
+     */
+    @Transactional
+    public void cambiarPassword(Long id, CambiarPasswordDTO dto, Long authenticatedUserId) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new UsuarioNotFoundException(id));
+
+        // Verificar que solo pueda cambiar su propia contraseña
+        if (!usuario.getIdUsuario().equals(authenticatedUserId)) {
+            log.warn("Usuario ID: {} intentó cambiar contraseña del usuario ID: {}",
+                    authenticatedUserId, id);
+            throw new ForbiddenAccessException(
+                    "No tienes permiso para modificar este perfil"
+            );
+        }
+
+        // Validar que la cuenta esté activa
+        if (!usuario.isActivo()) {
+            log.warn("Intento de cambiar contraseña en cuenta inactiva. Usuario ID: {}", id);
+            throw new AccountInactiveException("La cuenta está inactiva. Contacta con soporte");
+        }
+
+        // Validar que no sea una cuenta solo de Google
+        if (usuario.getPasswordUsuario() == null || usuario.getPasswordUsuario().isEmpty()) {
+            log.warn("Intento de cambiar contraseña en cuenta de Google. Usuario ID: {}", id);
+            throw new InvalidCredentialsException(
+                    "Las cuentas de Google no pueden establecer contraseña. " +
+                            "Usa la opción 'Olvidé mi contraseña' para crear una"
+            );
+        }
+
+        // Validar contraseña actual
+        if (!passwordEncoder.matches(dto.getPasswordActual(), usuario.getPasswordUsuario())) {
+            log.warn("Contraseña actual incorrecta para usuario ID: {}", id);
+            throw new InvalidCredentialsException("La contraseña actual es incorrecta");
+        }
+
+        // Validar que la nueva contraseña sea diferente a la actual
+        if (passwordEncoder.matches(dto.getNuevaPassword(), usuario.getPasswordUsuario())) {
+            log.warn("Usuario ID: {} intentó usar la misma contraseña", id);
+            throw new InvalidDataException(
+                    "La nueva contraseña debe ser diferente a la actual"
+            );
+        }
+
+        // Actualizar contraseña
+        usuario.setPasswordUsuario(passwordEncoder.encode(dto.getNuevaPassword()));
+        usuarioRepository.save(usuario);
+
+        // SEGURIDAD: Revocar todos los refresh tokens (logout global)
+        jwtService.revocarTodosLosTokensDelUsuario(id);
+
+        // Enviar email de notificación (alerta de seguridad)
+        try {
+            emailService.enviarEmailConfirmacionCambioPassword(
+                    usuario.getEmailUsuario(),
+                    usuario.getNombreUsuario()
+            );
+        } catch (Exception e) {
+            log.error("Error al enviar email de confirmación: {}", e.getMessage());
+            // No fallar el proceso si el email no se envía
+        }
+
+        log.info("Contraseña cambiada exitosamente para usuario ID: {}", id);
+    }
+
+    /**
+     * Genera un código aleatorio de 6 dígitos.
+     *
+     * @return String con 6 dígitos numéricos
+     */
+    private String generarCodigoAleatorio() {
+        Random random = new Random();
+        int codigo = 100000 + random.nextInt(900000); // Rango: 100000-999999
+        return String.valueOf(codigo);
+    }
+
+    /**
+     * Convierte una entidad Usuario a UsuarioDTO.
+     *
+     * @param usuario Entidad Usuario
+     * @return UsuarioDTO
+     */
+    private UsuarioDTO convertirAUsuarioDTO(Usuario usuario) {
+        return UsuarioDTO.builder()
+                .idUsuario(usuario.getIdUsuario())
+                .emailUsuario(usuario.getEmailUsuario())
+                .nombreUsuario(usuario.getNombreUsuario())
+                .apellidosUsuario(usuario.getApellidosUsuario())
+                .tipoUsuario(usuario.getTipoUsuario())
+                .fotoPerfil(usuario.getFotoPerfil())
+                .activo(usuario.isActivo())
+                .permiteGoogle(usuario.isPermiteGoogle())
+                .emailVerificado(usuario.isEmailVerificado())
+                .build();
+    }
+
+    /**
+     * Separa un nombre completo en nombre y apellidos.
+     *
+     * @param nombreCompleto Nombre completo
+     * @return Array con [nombre, apellidos]
+     */
+    private String[] separarNombreCompleto(String nombreCompleto) {
+        if (nombreCompleto == null || nombreCompleto.isEmpty()) {
+            return new String[]{"Usuario", ""};
+        }
+
+        String[] partes = nombreCompleto.trim().split("\\s+", 2);
+        String nombre = partes[0];
+        String apellidos = partes.length > 1 ? partes[1] : "";
+
+        return new String[]{nombre, apellidos};
+    }
 }
