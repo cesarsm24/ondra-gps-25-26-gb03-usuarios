@@ -224,6 +224,34 @@ public class GlobalExceptionHandler {
         );
     }
 
+    /**
+     * Maneja excepciones cuando no se encuentra un método de pago de usuario.
+     * <p>Código de error: PAYMENT_NOT_FOUND | HTTP 404</p>
+     */
+    @ExceptionHandler(MetodoPagoUsuarioNotFoundException.class)
+    public ResponseEntity<ErrorDTO> handlePagoUsuarioNotFound(MetodoPagoUsuarioNotFoundException ex) {
+        return createErrorResponse(
+                "PAYMENT_NOT_FOUND",
+                ex.getMessage(),
+                HttpStatus.NOT_FOUND,
+                false
+        );
+    }
+
+    /**
+     * Maneja excepciones cuando no se encuentra un método de cobro de artista.
+     * <p>Código de error: PAYMENT_NOT_FOUND | HTTP 404</p>
+     */
+    @ExceptionHandler(MetodoCobroArtistaNotFoundException.class)
+    public ResponseEntity<ErrorDTO> handlePagoArtistaNotFound(MetodoCobroArtistaNotFoundException ex) {
+        return createErrorResponse(
+                "PAYMENT_NOT_FOUND",
+                ex.getMessage(),
+                HttpStatus.NOT_FOUND,
+                false
+        );
+    }
+
     // ==================== EXCEPCIONES DE PERMISOS ====================
 
     /**
@@ -327,6 +355,7 @@ public class GlobalExceptionHandler {
                 true
         );
     }
+
 
     // ==================== EXCEPCIONES DE ARCHIVOS ====================
 
