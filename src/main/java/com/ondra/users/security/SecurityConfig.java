@@ -90,6 +90,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/login/google").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/refresh").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/logout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/usuarios/*/nombre-completo").permitAll()
 
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/recuperar-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios/restablecer-password").permitAll()

@@ -4,7 +4,6 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
-import com.google.firebase.auth.FirebaseAuth;
 import com.ondra.users.clients.ContenidosClient;
 import com.ondra.users.clients.RecomendacionesClient;
 import com.ondra.users.dto.*;
@@ -40,7 +39,6 @@ public class UsuarioService {
     private final SeguimientoRepository seguimientoRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final FirebaseAuth firebaseAuth;
     private final CloudinaryService cloudinaryService;
     private final EmailService emailService;
     private final SlugGeneratorService slugGeneratorService;
@@ -940,5 +938,42 @@ public class UsuarioService {
         String apellidos = partes.length > 1 ? partes[1] : "";
 
         return new String[]{nombre, apellidos};
+    }
+
+    /**
+     * Obtiene el nombre completo de un usuario o artista según el tipo indicado.
+     *
+     * @param id      ID de la entidad
+     * @param tipo    Tipo de usuario (ARTISTA o USUARIO)
+     * @return DTO con nombre completo y tipo
+     */
+    public NombreUsuarioDTO obtenerNombreCompleto(Long id, TipoUsuario tipo) {
+
+        String nombreCompleto;
+
+        if (tipo == TipoUsuario.ARTISTA) {
+            // Buscar directamente en ArtistaRepository
+            Artista artista = artistaRepository.findById(id)
+                    .orElseThrow(() -> new UsuarioNotFoundException(
+                            "Artista no encontrado con ID: " + id
+                    ));
+            nombreCompleto = artista.getNombreArtistico();
+
+        } else if (tipo == TipoUsuario.NORMAL) {
+            // Buscar directamente en UsuarioRepository
+            Usuario usuario = usuarioRepository.findById(id)
+                    .orElseThrow(() -> new UsuarioNotFoundException(
+                            "Usuario no encontrado con ID: " + id
+                    ));
+            nombreCompleto = usuario.getNombreUsuario() + " " + usuario.getApellidosUsuario();
+
+        } else {
+            throw new IllegalArgumentException("Tipo de usuario no soportado: " + tipo);
+        }
+
+        return NombreUsuarioDTO.builder()
+                .nombreCompleto(nombreCompleto)
+                .tipoUsuario(tipo.name())
+                .build();
     }
 }

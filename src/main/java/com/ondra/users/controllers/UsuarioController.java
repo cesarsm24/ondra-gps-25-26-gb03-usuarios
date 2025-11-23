@@ -2,6 +2,7 @@ package com.ondra.users.controllers;
 
 import com.ondra.users.dto.*;
 import com.ondra.users.exceptions.ForbiddenAccessException;
+import com.ondra.users.models.enums.TipoUsuario;
 import com.ondra.users.services.UsuarioService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -267,5 +268,19 @@ public class UsuarioController {
         usuarioService.marcarOnboardingCompletado(id);
 
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Obtiene el nombre completo de un usuario o artista.
+     *
+     * @param id   Identificador
+     * @param tipo TipoUsuario (ARTISTA o USUARIO)
+     */
+    @GetMapping(value = "/usuarios/{id}/nombre-completo", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<NombreUsuarioDTO> obtenerNombreCompleto(
+            @PathVariable Long id,
+            @RequestParam TipoUsuario tipo) {
+
+        return ResponseEntity.ok(usuarioService.obtenerNombreCompleto(id, tipo));
     }
 }
