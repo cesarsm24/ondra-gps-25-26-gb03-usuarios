@@ -1,0 +1,278 @@
+package com.ondra.users.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.crypto.SecretKey;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+
+/**
+ * Filtro de autenticación JWT para validación de tokens de acceso.
+ *
+ * <p>Intercepta las peticiones HTTP antes de la cadena de seguridad de Spring Security,
+ * extrae y valida el token JWT del encabezado Authorization, y establece el contexto
+ * de autenticación para endpoints protegidos.</p>
+ *
+ * <p>Los endpoints públicos definidos en {@link #shouldNotFilter(HttpServletRequest)}
+ * son excluidos automáticamente del proceso de validación.</p>
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    @Value("${jwt.secret}")
+    private String secretKey;
+
+    private static final String[] PUBLIC_PATTERNS = {
+            "/api/usuarios/login",
+            "/api/usuarios/login/google",
+            "/api/usuarios/refresh",
+            "/api/usuarios/logout",
+            "/api/usuarios/recuperar-password",
+            "/api/usuarios/restablecer-password",
+            "/api/usuarios/verificar-email",
+            "/api/usuarios/reenviar-verificacion",
+            "/api/public/",
+            "/actuator/health"
+    };
+
+    /**
+     * Determina si el filtro debe omitirse para una petición específica.
+     *
+     * @param request petición HTTP entrante
+     * @return true si el endpoint es público, false si requiere autenticación
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+
+        if ("POST".equals(method) && path.equals("/api/usuarios")) {
+            return true;
+        }
+
+        if ("GET".equals(method)) {
+            if (path.equals("/api/usuarios/stats")) {
+                return true;
+            }
+
+            if (path.startsWith("/api/public/")) {
+                return true;
+            }
+
+            if (path.equals("/api/artistas") || path.startsWith("/api/artistas?")) {
+                return true;
+            }
+
+            if (path.matches("/api/artistas/\\d+/?$")) {
+                return true;
+            }
+
+            if (path.matches("/api/artistas/\\d+/redes")) {
+                return true;
+            }
+
+            if (path.matches("/api/seguimientos/\\d+/seguidos") ||
+                    path.matches("/api/seguimientos/\\d+/seguidores") ||
+                    path.matches("/api/seguimientos/\\d+/estadisticas")) {
+                return true;
+            }
+        }
+
+        for (String pattern : PUBLIC_PATTERNS) {
+            if (path.startsWith(pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Procesa la validación del token JWT en cada petición protegida.
+     *
+     * @param request petición HTTP entrante
+     * @param response respuesta HTTP saliente
+     * @param filterChain cadena de filtros de Spring Security
+     * @throws ServletException si ocurre un error en el procesamiento del servlet
+     * @throws IOException si ocurre un error de entrada/salida
+     */
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
+
+        try {
+            String token = extractTokenFromRequest(request);
+
+            if (token != null && validateToken(token)) {
+                String userId = extractUserIdFromToken(token);
+
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userId,
+                                null,
+                                Collections.emptyList()
+                        );
+
+                authentication.setDetails(
+                        new WebAuthenticationDetailsSource().buildDetails(request)
+                );
+
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+                log.debug("✅ Usuario {} autenticado", userId);
+            }
+
+        } catch (ExpiredJwtException e) {
+            log.warn("❌ Token expirado: {}", e.getMessage());
+            writeErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "TOKEN_EXPIRED", "El token ha expirado");
+            return;
+
+        } catch (SignatureException | MalformedJwtException e) {
+            log.warn("❌ Token inválido: {}", e.getMessage());
+            writeErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "INVALID_TOKEN", "Token inválido");
+            return;
+
+        } catch (UnsupportedJwtException | IllegalArgumentException e) {
+            log.warn("❌ Token no soportado: {}", e.getMessage());
+            writeErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "INVALID_TOKEN", "Token inválido");
+            return;
+
+        } catch (Exception e) {
+            log.error("❌ Error validando JWT", e);
+            writeErrorResponse(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "INTERNAL_ERROR", "Error al procesar el token");
+            return;
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Extrae el token JWT del encabezado Authorization.
+     *
+     * @param request petición HTTP entrante
+     * @return token JWT sin el prefijo Bearer, o null si no existe
+     */
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+
+    /**
+     * Valida la firma y estructura del token JWT.
+     *
+     * @param token token JWT a validar
+     * @return true si el token es válido
+     * @throws ExpiredJwtException si el token ha expirado
+     * @throws SignatureException si la firma es inválida
+     * @throws MalformedJwtException si el formato del token es incorrecto
+     */
+    private boolean validateToken(String token) {
+        Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token);
+        return true;
+    }
+
+    /**
+     * Extrae el identificador de usuario del token JWT.
+     *
+     * @param token token JWT validado
+     * @return identificador del usuario como String
+     * @throws IllegalArgumentException si el token no contiene userId
+     */
+    private String extractUserIdFromToken(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+
+        Object userIdObj = claims.get("userId");
+        if (userIdObj == null) {
+            throw new IllegalArgumentException("Token sin userId");
+        }
+
+        return String.valueOf(userIdObj);
+    }
+
+    /**
+     * Extrae el identificador de artista del token JWT.
+     *
+     * @param token token JWT validado
+     * @return identificador del artista como String
+     * @throws IllegalArgumentException si el token no contiene artistId
+     */
+    private String extractArtistIdFromToken(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+
+        Object artistIdObj = claims.get("artistId");
+        if (artistIdObj == null) {
+            throw new IllegalArgumentException("Token sin artistId");
+        }
+
+        return String.valueOf(artistIdObj);
+    }
+
+    /**
+     * Genera la clave secreta para verificación de firmas JWT.
+     *
+     * @return clave secreta HMAC
+     */
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    /**
+     * Escribe una respuesta de error en formato JSON.
+     *
+     * @param response respuesta HTTP
+     * @param status código de estado HTTP
+     * @param error código de error
+     * @param message mensaje descriptivo del error
+     * @throws IOException si ocurre un error al escribir la respuesta
+     */
+    private void writeErrorResponse(HttpServletResponse response, int status,
+                                    String error, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(String.format(
+                "{\"error\":\"%s\",\"message\":\"%s\"}", error, message
+        ));
+    }
+}
