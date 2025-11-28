@@ -4,16 +4,14 @@ import com.ondra.users.dto.ArtistaDTO;
 import com.ondra.users.dto.CrearArtistaDTO;
 import com.ondra.users.dto.EditarArtistaDTO;
 import com.ondra.users.dto.SuccessfulResponseDTO;
-import com.ondra.users.models.dao.Usuario;
 import com.ondra.users.services.ArtistaService;
-import com.ondra.users.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,13 +19,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Controlador REST para gestión de perfiles de artistas.
- *
- * <p>Proporciona endpoints para crear, consultar, editar y eliminar perfiles artísticos.
- * Los artistas son usuarios con capacidades extendidas para publicar contenido musical.</p>
- *
- * <p>Endpoints públicos: listado de tendencias y consulta de perfiles.</p>
- * <p>Endpoints protegidos: creación, edición, renuncia y eliminación de perfiles.</p>
+ * Controlador REST para la gestión de perfiles de artistas.
+ * Proporciona operaciones de consulta, creación, edición y eliminación.
  */
 @RequiredArgsConstructor
 @RestController
@@ -37,10 +30,10 @@ public class ArtistaController {
     private final ArtistaService artistaService;
 
     /**
-     * Lista artistas marcados como tendencia.
+     * Obtiene artistas en tendencia.
      *
-     * @param limit Número máximo de resultados (por defecto 5, máximo 20)
-     * @return Lista de artistas en tendencia
+     * @param limit número máximo de resultados
+     * @return lista de artistas en tendencia
      */
     @GetMapping(value = "/artistas", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<ArtistaDTO>> listarArtistasTendencia(
@@ -51,14 +44,41 @@ public class ArtistaController {
     }
 
     /**
-     * Crea un perfil de artista para el usuario autenticado.
+     * Busca artistas mediante filtros opcionales.
      *
-     * <p>Convierte un usuario normal en artista, permitiéndole publicar contenido musical.</p>
+     * @param search nombre artístico o fragmento
+     * @param esTendencia indicador de tendencia
+     * @param orderBy criterio de ordenación
+     * @param page número de página
+     * @param limit tamaño de página
+     * @return página de resultados
+     */
+    @GetMapping(value = "/artistas/buscar", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Page<ArtistaDTO>> buscarArtistas(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean esTendencia,
+            @RequestParam(defaultValue = "most_recent") String orderBy,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+
+        if (limit > 100) {
+            limit = 100;
+        }
+
+        Page<ArtistaDTO> artistas = artistaService.buscarArtistas(
+                search, esTendencia, orderBy, page, limit
+        );
+
+        return ResponseEntity.ok(artistas);
+    }
+
+    /**
+     * Crea un perfil artístico para el usuario autenticado.
      *
-     * @param crearArtistaDTO Datos del perfil artístico
-     * @param foto Imagen de perfil (opcional)
-     * @param authentication Autenticación del usuario
-     * @return Perfil de artista creado
+     * @param crearArtistaDTO datos del artista
+     * @param foto imagen asociada
+     * @param authentication autenticación del usuario
+     * @return artista creado
      */
     @PostMapping(value = "/convertirse-artista", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ArtistaDTO> convertirseEnArtista(
@@ -69,23 +89,18 @@ public class ArtistaController {
         Long authenticatedUserId = Long.parseLong(authentication.getName());
 
         ArtistaDTO artista = artistaService.convertirseEnArtista(
-                crearArtistaDTO,
-                foto,
-                authenticatedUserId
+                crearArtistaDTO, foto, authenticatedUserId
         );
 
         return ResponseEntity.ok(artista);
     }
 
     /**
-     * Permite a un artista renunciar a su perfil y volver a ser usuario normal.
+     * Permite renunciar al perfil artístico.
      *
-     * <p>Elimina el perfil artístico, foto, redes sociales y métodos de cobro.
-     * El usuario mantiene su cuenta activa como usuario normal.</p>
-     *
-     * @param id ID del artista
-     * @param authentication Autenticación del usuario
-     * @return Confirmación de la operación
+     * @param id identificador del artista
+     * @param authentication autenticación del usuario
+     * @return confirmación de la operación
      */
     @PostMapping("/artistas/{id}/renunciar")
     public ResponseEntity<SuccessfulResponseDTO> renunciarPerfilArtista(
@@ -93,12 +108,11 @@ public class ArtistaController {
             Authentication authentication) {
 
         Long authenticatedUserId = Long.parseLong(authentication.getName());
-
         artistaService.renunciarPerfilArtista(id, authenticatedUserId);
 
         SuccessfulResponseDTO response = SuccessfulResponseDTO.builder()
                 .successful("Renuncia de perfil artístico exitosa")
-                .message("Has dejado de ser artista y ahora eres un usuario normal. Tu cuenta permanece activa.")
+                .message("Se ha revertido el perfil a usuario estándar")
                 .statusCode(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now().toString())
                 .build();
@@ -107,10 +121,10 @@ public class ArtistaController {
     }
 
     /**
-     * Obtiene el perfil completo de un artista.
+     * Obtiene un artista por su identificador.
      *
-     * @param id ID del artista
-     * @return Datos del perfil artístico
+     * @param id identificador del artista
+     * @return datos del artista
      */
     @GetMapping(value = "/artistas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ArtistaDTO> obtenerArtista(@PathVariable Long id) {
@@ -119,15 +133,12 @@ public class ArtistaController {
     }
 
     /**
-     * Actualiza los datos del perfil de un artista.
+     * Actualiza el perfil artístico.
      *
-     * <p>Solo el propietario puede editar su perfil. Si se proporciona una nueva foto,
-     * la anterior se elimina automáticamente de Cloudinary.</p>
-     *
-     * @param id ID del artista
-     * @param editarDTO Datos de actualización
-     * @param authentication Autenticación del usuario
-     * @return Perfil actualizado
+     * @param id identificador del artista
+     * @param editarDTO datos a modificar
+     * @param authentication autenticación del usuario
+     * @return artista actualizado
      */
     @PutMapping(value = "/artistas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ArtistaDTO> editarArtista(
@@ -142,16 +153,11 @@ public class ArtistaController {
     }
 
     /**
-     * Elimina el perfil de un artista y marca su cuenta como inactiva.
+     * Elimina un perfil artístico y marca la cuenta como inactiva.
      *
-     * <p>Elimina el perfil artístico, foto, redes sociales y métodos de cobro.
-     * La cuenta de usuario se marca como inactiva.</p>
-     *
-     * <p>El contenido musical del artista debe gestionarse desde el microservicio de Contenidos.</p>
-     *
-     * @param id ID del artista
-     * @param authentication Autenticación del usuario
-     * @return Confirmación de la eliminación
+     * @param id identificador del artista
+     * @param authentication autenticación del usuario
+     * @return confirmación de eliminación
      */
     @DeleteMapping("/artistas/{id}")
     public ResponseEntity<SuccessfulResponseDTO> eliminarArtista(
@@ -159,12 +165,11 @@ public class ArtistaController {
             Authentication authentication) {
 
         Long authenticatedUserId = Long.parseLong(authentication.getName());
-
         artistaService.eliminarArtista(id, authenticatedUserId);
 
         SuccessfulResponseDTO response = SuccessfulResponseDTO.builder()
-                .successful("Eliminación de artista exitosa")
-                .message("El perfil del artista ha sido eliminado correctamente")
+                .successful("Eliminación realizada")
+                .message("El perfil artístico ha sido eliminado correctamente")
                 .statusCode(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now().toString())
                 .build();

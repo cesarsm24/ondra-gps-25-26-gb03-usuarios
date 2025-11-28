@@ -15,6 +15,7 @@ import lombok.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class MetodoCobroArtistaEditarDTO {
 
     /** Nombre del propietario del método de cobro. Opcional, entre 3 y 200 caracteres. */

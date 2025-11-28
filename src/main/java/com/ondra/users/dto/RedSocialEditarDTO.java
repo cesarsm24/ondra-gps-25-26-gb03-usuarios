@@ -22,11 +22,11 @@ public class RedSocialEditarDTO {
      * Nuevo tipo de red social (opcional).
      *
      * Valores permitidos (case-insensitive):
-     * instagram, x, facebook, youtube, tiktok, spotify, soundcloud, otra
+     * instagram, x, facebook, youtube, tiktok, spotify, soundcloud
      */
     @Pattern(
-            regexp = "^(instagram|x|facebook|youtube|tiktok|spotify|soundcloud|otra|INSTAGRAM|X|FACEBOOK|YOUTUBE|TIKTOK|SPOTIFY|SOUNDCLOUD|OTRA)$",
-            message = "Tipo de red social no válido. Valores permitidos: instagram, x, facebook, youtube, tiktok, spotify, soundcloud, otra"
+            regexp = "^(instagram|x|facebook|youtube|tiktok|spotify|soundcloud|otra|INSTAGRAM|X|FACEBOOK|YOUTUBE|TIKTOK|SPOTIFY|SOUNDCLOUD)$",
+            message = "Tipo de red social no válido. Valores permitidos: instagram, x, facebook, youtube, tiktok, spotify, soundcloud"
     )
     private String tipoRedSocial;
 

@@ -12,6 +12,10 @@ import com.ondra.users.models.enums.TipoUsuario;
 import com.ondra.users.repositories.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -385,6 +389,51 @@ public class ArtistaService {
 
         log.info("✅ Renuncia de perfil artístico completada. Usuario ID: {} ahora es usuario normal",
                 authenticatedUserId);
+    }
+
+    /**
+     * Busca artistas con filtros opcionales y paginación.
+     *
+     * @param search término de búsqueda para el nombre artístico
+     * @param esTendencia filtrar por artistas en tendencia
+     * @param orderBy tipo de ordenamiento ('most_recent' o 'oldest')
+     * @param page número de página
+     * @param limit tamaño de página
+     * @return página de artistas que cumplen los criterios
+     */
+    @Transactional(readOnly = true)
+    public Page<ArtistaDTO> buscarArtistas(
+            String search,
+            Boolean esTendencia,
+            String orderBy,
+            int page,
+            int limit) {
+
+        log.debug("Buscando artistas - search: {}, esTendencia: {}, orderBy: {}, page: {}, limit: {}",
+                search, esTendencia, orderBy, page, limit);
+
+        // Determinar dirección de ordenamiento
+        Sort.Direction direction = "oldest".equals(orderBy)
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+
+        Sort sort = Sort.by(direction, "fechaInicioArtistico");
+        Pageable pageable = PageRequest.of(page, limit, sort);
+
+        // Buscar artistas
+        Page<Artista> artistasPage = artistaRepository.buscarArtistas(
+                search,
+                esTendencia,
+                pageable
+        );
+
+        log.info("Encontrados {} artistas (página {} de {})",
+                artistasPage.getNumberOfElements(),
+                artistasPage.getNumber() + 1,
+                artistasPage.getTotalPages());
+
+        // Convertir a DTO
+        return artistasPage.map(this::convertirADTO);
     }
 
     /**

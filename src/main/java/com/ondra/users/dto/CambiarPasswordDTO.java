@@ -2,6 +2,7 @@ package com.ondra.users.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Builder;
 import lombok.Data;
 
 /**
@@ -10,6 +11,7 @@ import lombok.Data;
  * Contiene la contraseña actual y la nueva contraseña que el usuario desea establecer.
  */
 @Data
+@Builder
 public class CambiarPasswordDTO {
 
     /** Contraseña actual del usuario. Obligatoria. */

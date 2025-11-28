@@ -1,41 +1,76 @@
 package com.ondra.users.data;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import java.util.Arrays;
 import java.util.List;
 
 /**
- * Clase que contiene los datos predefinidos de usuarios para el seeding de la base de datos.
- * Incluye información básica de usuarios con nombre, apellidos, username y contraseña.
+ * Proporciona datos predefinidos de usuarios y su información básica.
  */
 public class UsuariosData {
 
     /**
-     * Lista de usuarios predefinidos con su información básica.
-     * Cada usuario incluye nombre, apellidos, username y contraseña.
+     * Contiene la información principal de un usuario.
      */
-    public static final List<UsuarioInfo> USUARIOS_PREDEFINIDOS = Arrays.asList(
-            new UsuarioInfo("Ana", "García López", "ana.garcia", "ana"),
-            new UsuarioInfo("Carlos", "Martínez Ruiz", "carlos.martinez", "carlos"),
-            new UsuarioInfo("Laura", "Rodríguez Sánchez", "laura.rodriguez", "laura"),
-            new UsuarioInfo("Miguel", "Fernández Torres", "miguel.fernandez", "miguel"),
-            new UsuarioInfo("Sara", "González Pérez", "sara.gonzalez", "sara")
-    );
+    @Data
+    @AllArgsConstructor
+    public static class UsuarioInfo {
+
+        /**
+         * Nombre del usuario.
+         */
+        public String nombre;
+
+        /**
+         * Apellidos del usuario.
+         */
+        public String apellidos;
+
+        /**
+         * Identificador único utilizado en la plataforma.
+         */
+        public String username;
+
+        /**
+         * URL de la imagen asociada al usuario.
+         */
+        public String urlImagenCompartida;
+    }
 
     /**
-     * Clase interna para almacenar información predefinida de usuarios.
-     * Contiene todos los datos necesarios para crear un perfil básico de usuario.
+     * Lista predefinida de usuarios con datos básicos.
      */
-    public static class UsuarioInfo {
-        public final String nombre;
-        public final String apellidos;
-        public final String username;
-        public final String password;
-
-        public UsuarioInfo(String nombre, String apellidos, String username, String password) {
-            this.nombre = nombre;
-            this.apellidos = apellidos;
-            this.username = username;
-            this.password = password;
-        }
-    }
+    public static final List<UsuarioInfo> USUARIOS_PREDEFINIDOS = Arrays.asList(
+            new UsuarioInfo(
+                    "Ana",
+                    "García López",
+                    "anagarcia",
+                    "https://res.cloudinary.com/dh6w4hrx7/image/upload/v1764201947/anagarcia_ab2im5.jpg"
+            ),
+            new UsuarioInfo(
+                    "Carlos",
+                    "Martínez Ruiz",
+                    "carlosmartinez",
+                    "https://res.cloudinary.com/dh6w4hrx7/image/upload/v1764201949/carlosmartinez_vmpvwd.webp"
+            ),
+            new UsuarioInfo(
+                    "Laura",
+                    "Rodríguez Sánchez",
+                    "laurarodriguez",
+                    "https://res.cloudinary.com/dh6w4hrx7/image/upload/v1764201951/laurarodriguez_i6fh7k.jpg"
+            ),
+            new UsuarioInfo(
+                    "Miguel",
+                    "Fernández Torres",
+                    "miguelfernandez",
+                    "https://res.cloudinary.com/dh6w4hrx7/image/upload/v1764201952/miguelfernandez_ggngar.jpg"
+            ),
+            new UsuarioInfo(
+                    "Sara",
+                    "González Pérez",
+                    "saragonzalez",
+                    "https://res.cloudinary.com/dh6w4hrx7/image/upload/v1764201953/saragonzalez_tv5bgz.jpg"
+            )
+    );
 }

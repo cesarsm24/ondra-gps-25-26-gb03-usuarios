@@ -1,6 +1,7 @@
 package com.ondra.users.exceptions;
 
 import com.ondra.users.dto.ErrorDTO;
+import com.ondra.users.exceptions.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -61,7 +62,7 @@ public class GlobalExceptionHandler {
         return createErrorResponse(
                 "EMAIL_ALREADY_EXISTS",
                 ex.getMessage(),
-                HttpStatus.CONFLICT,
+                HttpStatus.BAD_REQUEST,
                 false
         );
     }
@@ -152,7 +153,7 @@ public class GlobalExceptionHandler {
         return createErrorResponse(
                 "INVALID_REFRESH_TOKEN",
                 ex.getMessage(),
-                HttpStatus.BAD_REQUEST,
+                HttpStatus.UNAUTHORIZED,
                 true
         );
     }

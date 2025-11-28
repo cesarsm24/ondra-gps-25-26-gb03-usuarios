@@ -13,9 +13,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Controlador para la gestión de usuarios del sistema.
- *
- * <p>Proporciona endpoints para autenticación, registro, perfil y recuperación de contraseña.</p>
+ * Controlador REST para la gestión de usuarios.
+ * Incluye operaciones de registro, autenticación, perfil y administración de credenciales.
  */
 @RequiredArgsConstructor
 @RestController
@@ -25,13 +24,10 @@ public class UsuarioController {
     private final UsuarioService usuarioService;
 
     /**
-     * Registra un nuevo usuario en el sistema.
+     * Registra un nuevo usuario y envía un correo de verificación.
      *
-     * <p>Envía automáticamente un correo de verificación.
-     * La cuenta estará activa pero no podrá hacer login hasta verificar el email.</p>
-     *
-     * @param registroDTO Datos del usuario a registrar
-     * @return Usuario creado
+     * @param registroDTO datos del usuario a registrar
+     * @return usuario creado
      */
     @PostMapping(value = "/usuarios", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<UsuarioDTO> registrarUsuario(@Valid @RequestBody RegistroUsuarioDTO registroDTO) {
@@ -40,10 +36,10 @@ public class UsuarioController {
     }
 
     /**
-     * Verifica el email de un usuario mediante token.
+     * Verifica el email mediante un token enviado al usuario.
      *
-     * @param token Token de verificación recibido por correo
-     * @return Mensaje de confirmación
+     * @param token token de verificación
+     * @return mensaje de confirmación
      */
     @GetMapping("/usuarios/verificar-email")
     public ResponseEntity<String> verificarEmail(@RequestParam String token) {
@@ -52,24 +48,22 @@ public class UsuarioController {
     }
 
     /**
-     * Reenvía el correo de verificación de email.
+     * Reenvía el correo de verificación.
      *
-     * @param reenviarDTO Email del usuario
-     * @return Mensaje de confirmación
+     * @param reenviarDTO datos del destinatario
+     * @return mensaje de confirmación
      */
     @PostMapping("/usuarios/reenviar-verificacion")
     public ResponseEntity<String> reenviarVerificacion(@Valid @RequestBody ReenviarVerificacionDTO reenviarDTO) {
         usuarioService.reenviarEmailVerificacion(reenviarDTO);
-        return ResponseEntity.ok("Correo de verificación reenviado. Revisa tu bandeja de entrada");
+        return ResponseEntity.ok("Correo de verificación reenviado");
     }
 
     /**
-     * Autentica un usuario mediante email y contraseña.
+     * Realiza autenticación mediante email y contraseña.
      *
-     * <p>Solo permite login si el email ha sido verificado.</p>
-     *
-     * @param loginDTO Credenciales de acceso
-     * @return Token JWT y datos del usuario
+     * @param loginDTO credenciales del usuario
+     * @return token de acceso y datos del usuario
      */
     @PostMapping(value = "/usuarios/login", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AuthResponseDTO> loginUsuario(@Valid @RequestBody LoginUsuarioDTO loginDTO) {
@@ -78,12 +72,10 @@ public class UsuarioController {
     }
 
     /**
-     * Autentica o registra un usuario mediante token de Google.
+     * Autentica o registra un usuario mediante Google.
      *
-     * <p>Los usuarios de Google no requieren verificación de email.</p>
-     *
-     * @param loginGoogleDTO Token de autenticación de Google
-     * @return Token JWT y datos del usuario
+     * @param loginGoogleDTO token de autenticación de Google
+     * @return token de acceso y datos del usuario
      */
     @PostMapping(value = "/usuarios/login/google", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AuthResponseDTO> loginGoogle(@Valid @RequestBody LoginGoogleDTO loginGoogleDTO) {
@@ -92,25 +84,26 @@ public class UsuarioController {
     }
 
     /**
-     * Renueva un access token mediante refresh token.
+     * Genera un nuevo access token mediante refresh token válido.
      *
-     * @param request Refresh token válido
-     * @return Nuevo access token y refresh token
+     * @param request refresh token recibido
+     * @return nuevos tokens
      */
     @PostMapping(value = "/usuarios/refresh", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<RefreshTokenResponseDTO> refreshToken(
             @Valid @RequestBody RefreshTokenRequestDTO request) {
-        RefreshTokenResponseDTO response = usuarioService.renovarAccessToken(
-                request.getRefreshToken()
-        );
+
+        RefreshTokenResponseDTO response =
+                usuarioService.renovarAccessToken(request.getRefreshToken());
+
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Cierra la sesión de un usuario revocando su refresh token.
+     * Revoca un refresh token y cierra la sesión asociada.
      *
-     * @param request Refresh token a revocar
-     * @return Respuesta vacía
+     * @param request refresh token a revocar
+     * @return respuesta vacía
      */
     @PostMapping("/usuarios/logout")
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequestDTO request) {
@@ -119,10 +112,10 @@ public class UsuarioController {
     }
 
     /**
-     * Cierra todas las sesiones activas de un usuario.
+     * Cierra todas las sesiones activas del usuario.
      *
-     * @param authentication Contexto de autenticación
-     * @return Respuesta vacía
+     * @param authentication autenticación actual
+     * @return respuesta vacía
      */
     @PostMapping("/usuarios/logout-all")
     public ResponseEntity<Void> logoutAll(Authentication authentication) {
@@ -132,37 +125,37 @@ public class UsuarioController {
     }
 
     /**
-     * Solicita un enlace de recuperación de contraseña.
+     * Solicita un enlace para recuperar la contraseña.
      *
-     * @param dto Email del usuario
-     * @return Mensaje de confirmación
+     * @param dto email del usuario
+     * @return mensaje de confirmación
      */
     @PostMapping("/usuarios/recuperar-password")
     public ResponseEntity<String> recuperarPassword(
             @Valid @RequestBody RecuperarPasswordDTO dto) {
+
         usuarioService.solicitarRecuperacionPassword(dto);
-        return ResponseEntity.ok(
-                "Si el email existe, recibirás un enlace de recuperación"
-        );
+        return ResponseEntity.ok("Si el email existe, recibirás un enlace de recuperación");
     }
 
     /**
-     * Restablece la contraseña mediante token de recuperación.
+     * Restablece la contraseña mediante un token de recuperación.
      *
-     * @param dto Token y nueva contraseña
-     * @return Mensaje de confirmación
+     * @param dto token y nueva contraseña
+     * @return mensaje de confirmación
      */
     @PostMapping("/usuarios/restablecer-password")
     public ResponseEntity<String> restablecerPassword(
             @Valid @RequestBody RestablecerPasswordDTO dto) {
+
         usuarioService.restablecerPassword(dto);
         return ResponseEntity.ok("Contraseña restablecida correctamente");
     }
 
     /**
-     * Obtiene estadísticas de usuarios activos del sistema.
+     * Obtiene estadísticas globales del sistema.
      *
-     * @return Total de usuarios normales y artistas
+     * @return datos agregados de usuarios
      */
     @GetMapping(value = "/usuarios/stats", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<EstadisticasGlobalesDTO> obtenerStats() {
@@ -171,38 +164,36 @@ public class UsuarioController {
     }
 
     /**
-     * Obtiene el perfil de un usuario.
+     * Obtiene el perfil de un usuario autenticado.
      *
-     * <p>Solo puedes obtener tu propio perfil.</p>
-     *
-     * @param id Identificador del usuario
-     * @param authentication Contexto de autenticación
-     * @return Datos del usuario
+     * @param id identificador del usuario
+     * @param authentication autenticación actual
+     * @return datos del usuario
      */
     @GetMapping(value = "/usuarios/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<UsuarioDTO> obtenerUsuario(
             @PathVariable Long id,
             Authentication authentication) {
+
         Long authenticatedUserId = Long.parseLong(authentication.getName());
         UsuarioDTO usuario = usuarioService.obtenerUsuario(id, authenticatedUserId);
         return ResponseEntity.ok(usuario);
     }
 
     /**
-     * Actualiza los datos del perfil de un usuario.
+     * Actualiza datos del usuario autenticado.
      *
-     * <p>Solo el propietario puede editar su perfil.</p>
-     *
-     * @param id Identificador del usuario
-     * @param editarDTO Datos a actualizar
-     * @param authentication Contexto de autenticación
-     * @return Usuario actualizado
+     * @param id identificador del usuario
+     * @param editarDTO datos a modificar
+     * @param authentication autenticación actual
+     * @return usuario actualizado
      */
     @PutMapping(value = "/usuarios/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<UsuarioDTO> editarUsuario(
             @PathVariable Long id,
             @Valid @RequestBody EditarUsuarioDTO editarDTO,
             Authentication authentication) {
+
         Long authenticatedUserId = Long.parseLong(authentication.getName());
         UsuarioDTO usuario = usuarioService.editarUsuario(id, editarDTO, authenticatedUserId);
         return ResponseEntity.ok(usuario);
@@ -211,34 +202,34 @@ public class UsuarioController {
     /**
      * Cambia la contraseña de un usuario autenticado.
      *
-     * @param id Identificador del usuario
-     * @param dto Contraseña actual y nueva contraseña
-     * @param authentication Contexto de autenticación
-     * @return Mensaje de confirmación
+     * @param id identificador del usuario
+     * @param dto credenciales de cambio de contraseña
+     * @param authentication autenticación actual
+     * @return mensaje de confirmación
      */
     @PutMapping("/usuarios/{id}/cambiar-password")
     public ResponseEntity<String> cambiarPassword(
             @PathVariable Long id,
             @Valid @RequestBody CambiarPasswordDTO dto,
             Authentication authentication) {
+
         Long authenticatedUserId = Long.parseLong(authentication.getName());
         usuarioService.cambiarPassword(id, dto, authenticatedUserId);
         return ResponseEntity.ok("Contraseña cambiada correctamente");
     }
 
     /**
-     * Elimina la cuenta de un usuario.
+     * Elimina la cuenta del usuario autenticado.
      *
-     * <p>Solo el propietario puede eliminar su cuenta.</p>
-     *
-     * @param id Identificador del usuario
-     * @param authentication Contexto de autenticación
-     * @return Respuesta vacía
+     * @param id identificador del usuario
+     * @param authentication autenticación actual
+     * @return respuesta vacía
      */
     @DeleteMapping("/usuarios/{id}")
     public ResponseEntity<Void> eliminarUsuario(
             @PathVariable Long id,
             Authentication authentication) {
+
         Long authenticatedUserId = Long.parseLong(authentication.getName());
         usuarioService.eliminarUsuario(id, authenticatedUserId);
         return ResponseEntity.ok().build();
@@ -247,40 +238,37 @@ public class UsuarioController {
     /**
      * Marca el onboarding como completado.
      *
-     * <p>Se ejecuta al completar la configuración inicial o al omitir el wizard.</p>
-     *
-     * @param id Identificador del usuario
-     * @param authentication Contexto de autenticación
-     * @return Respuesta vacía
+     * @param id identificador del usuario
+     * @param authentication autenticación actual
+     * @return respuesta vacía
      */
     @PatchMapping("/usuarios/{id}/onboarding-completado")
     public ResponseEntity<Void> marcarOnboardingCompletado(
             @PathVariable Long id,
             Authentication authentication) {
+
         Long authenticatedUserId = Long.parseLong(authentication.getName());
 
         if (!authenticatedUserId.equals(id)) {
-            throw new ForbiddenAccessException(
-                    "No puedes modificar el onboarding de otro usuario"
-            );
+            throw new ForbiddenAccessException("No puedes modificar el onboarding de otro usuario");
         }
 
         usuarioService.marcarOnboardingCompletado(id);
-
         return ResponseEntity.ok().build();
     }
 
     /**
-     * Obtiene el nombre completo de un usuario o artista.
+     * Obtiene los datos básicos de un usuario o artista.
      *
-     * @param id   Identificador
-     * @param tipo TipoUsuario (ARTISTA o USUARIO)
+     * @param id identificador del artista o usuario según el tipo
+     * @param tipo tipo de usuario (ARTISTA o NORMAL)
+     * @return datos básicos del usuario
      */
-    @GetMapping(value = "/usuarios/{id}/nombre-completo", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<NombreUsuarioDTO> obtenerNombreCompleto(
+    @GetMapping(value = "/usuarios/{id}/datos-usuario", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<DatosUsuarioDTO> obtenerDatosUsuario(
             @PathVariable Long id,
             @RequestParam TipoUsuario tipo) {
 
-        return ResponseEntity.ok(usuarioService.obtenerNombreCompleto(id, tipo));
+        return ResponseEntity.ok(usuarioService.obtenerDatosUsuario(id, tipo));
     }
 }

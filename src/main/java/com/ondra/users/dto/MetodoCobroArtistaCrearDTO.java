@@ -16,6 +16,7 @@ import lombok.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class MetodoCobroArtistaCrearDTO {
 
     /** Tipo de método de cobro. Obligatorio. Valores válidos: PAYPAL, BIZUM, TRANSFERENCIA. */
