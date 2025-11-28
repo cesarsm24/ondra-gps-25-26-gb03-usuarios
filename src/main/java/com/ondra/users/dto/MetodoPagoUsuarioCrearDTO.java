@@ -16,6 +16,7 @@ import lombok.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class MetodoPagoUsuarioCrearDTO {
 
     /** Tipo de método de pago. Obligatorio. Valores válidos: TARJETA, PAYPAL, BIZUM, TRANSFERENCIA. */

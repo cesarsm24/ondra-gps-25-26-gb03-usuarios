@@ -37,7 +37,7 @@ public class Artista {
     /**
      * Nombre artístico del usuario.
      */
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255, columnDefinition = "VARCHAR(255)")
     private String nombreArtistico;
 
     /**

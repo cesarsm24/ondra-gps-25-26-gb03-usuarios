@@ -403,7 +403,7 @@ public class UsuarioService {
                 usuario.getEmailUsuario(),
                 usuario.getIdUsuario(),
                 usuario.getTipoUsuario().name(),
-                null
+                usuario.getArtista() != null ? usuario.getArtista().getIdArtista() : null
         );
 
         RefreshToken refreshToken = jwtService.generarRefreshToken(usuario);
@@ -428,11 +428,16 @@ public class UsuarioService {
         RefreshToken refreshToken = jwtService.validarRefreshToken(refreshTokenString);
         Usuario usuario = refreshToken.getUsuario();
 
+        Long idArtista = null;
+        if (usuario.getTipoUsuario() == TipoUsuario.ARTISTA && usuario.getArtista() != null) {
+            idArtista = usuario.getArtista().getIdArtista();
+        }
+
         String nuevoAccessToken = jwtService.generarToken(
                 usuario.getEmailUsuario(),
                 usuario.getIdUsuario(),
                 usuario.getTipoUsuario().name(),
-                usuario.getArtista().getIdArtista()
+                idArtista
         );
 
         jwtService.revocarRefreshToken(refreshTokenString);
@@ -941,38 +946,48 @@ public class UsuarioService {
     }
 
     /**
-     * Obtiene el nombre completo de un usuario o artista según el tipo indicado.
+     * Obtiene el nombre completo de un artista o usuario según el tipo indicado.
      *
-     * @param id      ID de la entidad
-     * @param tipo    Tipo de usuario (ARTISTA o USUARIO)
-     * @return DTO con nombre completo y tipo
+     * @param id   ID del artista o del usuario según el tipo
+     * @param tipo Tipo de usuario (ARTISTA o NORMAL)
+     * @return DTO con nombre completo, slug y foto
      */
-    public NombreUsuarioDTO obtenerNombreCompleto(Long id, TipoUsuario tipo) {
+    public DatosUsuarioDTO obtenerDatosUsuario(Long id, TipoUsuario tipo) {
 
         String nombreCompleto;
+        String slug;
+        String urlFoto;
 
         if (tipo == TipoUsuario.ARTISTA) {
-            // Buscar directamente en ArtistaRepository
+            // Buscar directamente por ID de artista
             Artista artista = artistaRepository.findById(id)
                     .orElseThrow(() -> new UsuarioNotFoundException(
                             "Artista no encontrado con ID: " + id
                     ));
+
             nombreCompleto = artista.getNombreArtistico();
+            slug = artista.getSlugArtistico();
+            urlFoto = artista.getFotoPerfilArtistico();
 
         } else if (tipo == TipoUsuario.NORMAL) {
-            // Buscar directamente en UsuarioRepository
+            // Buscar por ID de usuario
             Usuario usuario = usuarioRepository.findById(id)
                     .orElseThrow(() -> new UsuarioNotFoundException(
                             "Usuario no encontrado con ID: " + id
                     ));
+
             nombreCompleto = usuario.getNombreUsuario() + " " + usuario.getApellidosUsuario();
+            slug = usuario.getSlug();
+            urlFoto = usuario.getFotoPerfil();
 
         } else {
             throw new IllegalArgumentException("Tipo de usuario no soportado: " + tipo);
         }
 
-        return NombreUsuarioDTO.builder()
+        return DatosUsuarioDTO.builder()
                 .nombreCompleto(nombreCompleto)
+                .slug(slug)
+                .urlFoto(urlFoto)
                 .tipoUsuario(tipo.name())
                 .build();
     }

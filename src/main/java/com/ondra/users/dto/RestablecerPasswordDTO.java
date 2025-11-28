@@ -1,31 +1,31 @@
 package com.ondra.users.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * DTO utilizado para restablecer la contraseña de un usuario.
- *
- * Contiene el email del usuario, el código de verificación recibido
- * y la nueva contraseña.
+ * DTO para restablecer la contraseña de un usuario mediante código de verificación.
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class RestablecerPasswordDTO {
 
-    /** Correo electrónico del usuario. Obligatorio y válido. */
+    /** Email del usuario que solicita el restablecimiento */
     @NotBlank(message = "El email es obligatorio")
-    @Email(message = "Email inválido")
     private String emailUsuario;
 
-    /** Código de verificación de 6 dígitos enviado al usuario. */
+    /** Código de 6 dígitos recibido por email */
     @NotBlank(message = "El código de verificación es obligatorio")
-    @Pattern(regexp = "\\d{6}", message = "El código debe tener 6 dígitos")
+    @Size(min = 6, max = 6, message = "El código debe tener 6 dígitos")
     private String codigoVerificacion;
 
-    /** Nueva contraseña del usuario. Obligatoria y mínimo 8 caracteres. */
+    /** Nueva contraseña a establecer */
     @NotBlank(message = "La nueva contraseña es obligatoria")
     @Size(min = 8, message = "La contraseña debe tener al menos 8 caracteres")
     private String nuevaPassword;

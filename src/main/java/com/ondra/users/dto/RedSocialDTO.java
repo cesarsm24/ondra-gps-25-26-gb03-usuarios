@@ -23,7 +23,7 @@ public class RedSocialDTO {
     /**
      * Tipo de red social.
      *
-     * Ejemplos: instagram, facebook, x, tiktok, youtube, spotify, otra.
+     * Ejemplos: instagram, facebook, x, tiktok, youtube, spotify.
      */
     private String tipoRedSocial;
 
