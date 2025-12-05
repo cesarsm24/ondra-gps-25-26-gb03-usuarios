@@ -218,7 +218,7 @@ public class CloudinaryService {
      * @return true si el tamaño no excede 5MB
      */
     public boolean esTamanoValido(MultipartFile file) {
-        long maxSize = 5 * 1024 * 1024;
+        long maxSize = 5 * 1024 * 1024L;
         return file != null && file.getSize() <= maxSize;
     }
 
