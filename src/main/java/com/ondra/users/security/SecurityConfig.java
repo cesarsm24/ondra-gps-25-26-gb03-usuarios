@@ -2,6 +2,7 @@ package com.ondra.users.security;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,22 +18,10 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Configuración de seguridad de Spring Security.
- *
- * <p>Define la cadena de filtros de seguridad, políticas de autenticación
- * y autorización de endpoints, configuración CORS y codificación de contraseñas.</p>
- *
- * <p>Orden de filtros aplicados:</p>
- * <ol>
- *   <li>ServiceTokenFilter - Autenticación entre microservicios</li>
- *   <li>JwtAuthenticationFilter - Autenticación de usuarios</li>
- *   <li>UsernamePasswordAuthenticationFilter - Filtro estándar de Spring</li>
- * </ol>
- *
- * <p>Los endpoints públicos deben estar sincronizados con
- * {@link JwtAuthenticationFilter#shouldNotFilter(jakarta.servlet.http.HttpServletRequest)}.</p>
  */
 @Slf4j
 @Configuration
@@ -43,25 +32,34 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ServiceTokenFilter serviceTokenFilter;
 
-    /**
-     * Configura el codificador de contraseñas BCrypt.
-     *
-     * @return codificador de contraseñas
-     */
+    // Solución Code Smell 1: Constante para rol duplicado
+    private static final String ROLE_SERVICE = "SERVICE";
+
+    // Solución Code Smell 2: Constante para path de artistas duplicado
+    private static final String ARTIST_PATH_WITH_ID = "/api/artistas/{id}";
+
+    // Solución Code Smell 3: Constante para path de usuarios duplicado
+    private static final String USER_PATH_WITH_ID = "/api/usuarios/{id}";
+
+    // Configuración adicional de paths para mayor mantenibilidad
+    private static final String API_USUARIOS = "/api/usuarios";
+    private static final String API_ARTISTAS = "/api/artistas";
+    private static final String API_SEGUIMIENTOS = "/api/seguimientos";
+    private static final String API_PUBLIC = "/api/public/**";
+    private static final String API_INTERNAL = "/api/internal/**";
+
+    @Value("${cors.allowed-origins:http://localhost:4200}")
+    private List<String> allowedOrigins;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Configura las políticas CORS para peticiones entre orígenes.
-     *
-     * @return fuente de configuración CORS
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
@@ -74,22 +72,6 @@ public class SecurityConfig {
         return source;
     }
 
-    /**
-     * Configura la cadena de filtros de seguridad y las reglas de autorización.
-     *
-     * <p>Reglas de acceso por recurso:</p>
-     * <ul>
-     *   <li>Registro y autenticación: Públicos</li>
-     *   <li>Endpoints /datos-usuario y /existe: Solo microservicios (ROLE_SERVICE)</li>
-     *   <li>Consultas públicas de artistas: GET públicos</li>
-     *   <li>Gestión de usuarios y artistas: Requiere autenticación JWT</li>
-     *   <li>Seguimientos: GET públicos, POST/DELETE autenticados</li>
-     * </ul>
-     *
-     * @param http configurador de seguridad HTTP
-     * @return cadena de filtros configurada
-     * @throws Exception si ocurre un error en la configuración
-     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -101,70 +83,70 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Configuración pública
                         .requestMatchers(HttpMethod.GET, "/api/config/public").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/stats").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_USUARIOS + "/stats").permitAll()
 
                         // Registro y autenticación - Públicos
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/login").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/login/google").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/refresh").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/logout").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS).permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/login/google").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/refresh").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/logout").permitAll()
 
                         // Endpoints internos - Solo para microservicios
-                        .requestMatchers("/api/internal/**").hasRole("SERVICE")
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/*/datos-usuario").hasRole("SERVICE")
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/*/existe").hasRole("SERVICE")
+                        .requestMatchers(API_INTERNAL).hasRole(ROLE_SERVICE)
+                        .requestMatchers(HttpMethod.GET, API_USUARIOS + "/*/datos-usuario").hasRole(ROLE_SERVICE)
+                        .requestMatchers(HttpMethod.GET, API_USUARIOS + "/*/existe").hasRole(ROLE_SERVICE)
 
                         // Recuperación de contraseña - Públicos
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/recuperar-password").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/restablecer-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/recuperar-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/restablecer-password").permitAll()
 
                         // Verificación de email - Públicos
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/verificar-email").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/reenviar-verificacion").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_USUARIOS + "/verificar-email").permitAll()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/reenviar-verificacion").permitAll()
 
                         // Endpoints públicos generales
-                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_PUBLIC).permitAll()
 
                         // Artistas - Consultas públicas
-                        .requestMatchers(HttpMethod.GET, "/api/artistas").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/artistas/{id}").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/artistas/{id}/redes").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_ARTISTAS).permitAll()
+                        .requestMatchers(HttpMethod.GET, ARTIST_PATH_WITH_ID).permitAll()
+                        .requestMatchers(HttpMethod.GET, ARTIST_PATH_WITH_ID + "/redes").permitAll()
 
                         // Artistas - Métodos de cobro (requieren autenticación)
-                        .requestMatchers("/api/artistas/{id}/metodos-cobro/**").authenticated()
+                        .requestMatchers(ARTIST_PATH_WITH_ID + "/metodos-cobro/**").authenticated()
 
                         // Artistas - Redes sociales (requieren autenticación)
-                        .requestMatchers(HttpMethod.POST, "/api/artistas/{id}/redes").authenticated()
-                        .requestMatchers(HttpMethod.PUT, "/api/artistas/{id}/redes/{id_red}").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/artistas/{id}/redes/{id_red}").authenticated()
+                        .requestMatchers(HttpMethod.POST, ARTIST_PATH_WITH_ID + "/redes").authenticated()
+                        .requestMatchers(HttpMethod.PUT, ARTIST_PATH_WITH_ID + "/redes/{id_red}").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, ARTIST_PATH_WITH_ID + "/redes/{id_red}").authenticated()
 
                         // Artistas - Gestión (requieren autenticación)
-                        .requestMatchers(HttpMethod.POST, "/api/artistas").authenticated()
-                        .requestMatchers(HttpMethod.PUT, "/api/artistas/{id}").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/artistas/{id}").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/artistas/{id}/renunciar").authenticated()
+                        .requestMatchers(HttpMethod.POST, API_ARTISTAS).authenticated()
+                        .requestMatchers(HttpMethod.PUT, ARTIST_PATH_WITH_ID).authenticated()
+                        .requestMatchers(HttpMethod.DELETE, ARTIST_PATH_WITH_ID).authenticated()
+                        .requestMatchers(HttpMethod.POST, ARTIST_PATH_WITH_ID + "/renunciar").authenticated()
 
                         // Usuarios - Métodos de pago (requieren autenticación)
-                        .requestMatchers("/api/usuarios/{id}/metodos-pago/**").authenticated()
+                        .requestMatchers(USER_PATH_WITH_ID + "/metodos-pago/**").authenticated()
 
                         // Usuarios - Gestión de perfil (requieren autenticación)
-                        .requestMatchers(HttpMethod.GET, "/api/usuarios/{id}").authenticated()
-                        .requestMatchers(HttpMethod.PUT, "/api/usuarios/{id}").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/usuarios/{id}").authenticated()
-                        .requestMatchers(HttpMethod.PATCH, "/api/usuarios/{id}/onboarding-completado").authenticated()
-                        .requestMatchers(HttpMethod.PUT, "/api/usuarios/{id}/cambiar-password").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/usuarios/logout-all").authenticated()
+                        .requestMatchers(HttpMethod.GET, USER_PATH_WITH_ID).authenticated()
+                        .requestMatchers(HttpMethod.PUT, USER_PATH_WITH_ID).authenticated()
+                        .requestMatchers(HttpMethod.DELETE, USER_PATH_WITH_ID).authenticated()
+                        .requestMatchers(HttpMethod.PATCH, USER_PATH_WITH_ID + "/onboarding-completado").authenticated()
+                        .requestMatchers(HttpMethod.PUT, USER_PATH_WITH_ID + "/cambiar-password").authenticated()
+                        .requestMatchers(HttpMethod.POST, API_USUARIOS + "/logout-all").authenticated()
 
                         // Seguimientos - Consultas públicas
-                        .requestMatchers(HttpMethod.GET, "/api/seguimientos/{idUsuario}/seguidos").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/seguimientos/{idUsuario}/seguidores").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/seguimientos/{idUsuario}/estadisticas").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_SEGUIMIENTOS + "/{idUsuario}/seguidos").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_SEGUIMIENTOS + "/{idUsuario}/seguidores").permitAll()
+                        .requestMatchers(HttpMethod.GET, API_SEGUIMIENTOS + "/{idUsuario}/estadisticas").permitAll()
 
                         // Seguimientos - Acciones (requieren autenticación)
-                        .requestMatchers(HttpMethod.POST, "/api/seguimientos").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/seguimientos/{idUsuario}").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/seguimientos/{idUsuario}/verificar").authenticated()
+                        .requestMatchers(HttpMethod.POST, API_SEGUIMIENTOS).authenticated()
+                        .requestMatchers(HttpMethod.DELETE, API_SEGUIMIENTOS + "/{idUsuario}").authenticated()
+                        .requestMatchers(HttpMethod.GET, API_SEGUIMIENTOS + "/{idUsuario}/verificar").authenticated()
 
                         // Actuator
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
