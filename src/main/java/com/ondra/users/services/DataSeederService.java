@@ -90,27 +90,27 @@ public class DataSeederService implements CommandLineRunner {
             UsuarioInfo usuarioInfo = UsuariosData.USUARIOS_PREDEFINIDOS.get(i);
             try {
                 log.info("📝 Procesando usuario {}/{}: {}",
-                        i + 1, UsuariosData.USUARIOS_PREDEFINIDOS.size(), usuarioInfo.username);
+                        i + 1, UsuariosData.USUARIOS_PREDEFINIDOS.size(), usuarioInfo.getUsername());
                 Usuario usuario = Usuario.builder()
-                        .nombreUsuario(usuarioInfo.nombre)
-                        .apellidosUsuario(usuarioInfo.apellidos)
-                        .emailUsuario(usuarioInfo.username + "@ondrasounds.com")
+                        .nombreUsuario(usuarioInfo.getNombre())
+                        .apellidosUsuario(usuarioInfo.getApellidos())
+                        .emailUsuario(usuarioInfo.getUsername() + "@ondrasounds.com")
                         .passwordUsuario(passwordEncoder.encode("Usuario2025!"))
                         .tipoUsuario(TipoUsuario.NORMAL)
                         .onboardingCompletado(false)
                         .fechaRegistro(generarFechaRegistro())
                         .activo(true)
-                        .slug(usuarioInfo.username)
+                        .slug(usuarioInfo.getUsername())
                         .emailVerificado(true)
                         .permiteGoogle(random.nextBoolean())
-                        .fotoPerfil(usuarioInfo.urlImagenCompartida)
+                        .fotoPerfil(usuarioInfo.getUrlImagenCompartida())
                         .build();
                 usuarioRepository.save(usuario);
                 int cantidadPagos = random.nextInt(2) + 1;
                 generarPagosUsuario(usuario, cantidadPagos);
-                log.info("✅ {} completado", usuarioInfo.username);
+                log.info("✅ {} completado", usuarioInfo.getUsername());
             } catch (Exception e) {
-                log.error("❌ Error al procesar {}: {}", usuarioInfo.username, e.getMessage());
+                log.error("❌ Error al procesar {}: {}", usuarioInfo.getUsername(), e.getMessage());
             }
         }
     }
@@ -123,26 +123,26 @@ public class DataSeederService implements CommandLineRunner {
             ArtistaInfo artistaInfo = ArtistasData.ARTISTAS_PREDEFINIDOS.get(i);
             try {
                 log.info("📝 Procesando artista {}/{}: {}",
-                        i + 1, ArtistasData.ARTISTAS_PREDEFINIDOS.size(), artistaInfo.nombreArtistico);
+                        i + 1, ArtistasData.ARTISTAS_PREDEFINIDOS.size(), artistaInfo.getNombreArtistico());
                 Usuario usuario = crearUsuario(artistaInfo);
-                usuario.setFotoPerfil(artistaInfo.urlImagenCompartida);
+                usuario.setFotoPerfil(artistaInfo.getUrlImagenCompartida());
                 usuarioRepository.save(usuario);
                 Artista artista = Artista.builder()
                         .usuario(usuario)
-                        .nombreArtistico(artistaInfo.nombreArtistico)
-                        .biografiaArtistico(artistaInfo.biografia)
-                        .fotoPerfilArtistico(artistaInfo.urlImagenCompartida)
+                        .nombreArtistico(artistaInfo.getNombreArtistico())
+                        .biografiaArtistico(artistaInfo.getBiografia())
+                        .fotoPerfilArtistico(artistaInfo.getUrlImagenCompartida())
                         .fechaInicioArtistico(generarFechaInicioArtistico())
-                        .slugArtistico(artistaInfo.username)
-                        .esTendencia(artistaInfo.esTendencia)
+                        .slugArtistico(artistaInfo.getUsername())
+                        .esTendencia(artistaInfo.isEsTendencia())
                         .build();
                 artistaRepository.save(artista);
                 generarRedesSociales(artista, artistaInfo);
                 generarPagosUsuario(usuario, random.nextInt(2) + 1);
                 generarPagosArtista(artista, random.nextInt(2) + 1);
-                log.info("✅ {} completado", artistaInfo.nombreArtistico);
+                log.info("✅ {} completado", artistaInfo.getNombreArtistico());
             } catch (Exception e) {
-                log.error("❌ Error al procesar {}: {}", artistaInfo.nombreArtistico, e.getMessage());
+                log.error("❌ Error al procesar {}: {}", artistaInfo.getNombreArtistico(), e.getMessage());
             }
         }
     }
@@ -151,17 +151,17 @@ public class DataSeederService implements CommandLineRunner {
      * Crea el usuario base para un artista.
      */
     private Usuario crearUsuario(ArtistaInfo artistaInfo) {
-        String[] partes = artistaInfo.nombreReal.split(" ", 2);
+        String[] partes = artistaInfo.getNombreReal().split(" ", 2);
         return Usuario.builder()
                 .nombreUsuario(partes[0])
                 .apellidosUsuario(partes.length > 1 ? partes[1] : "")
-                .emailUsuario(artistaInfo.username + "@ondrasounds.com")
+                .emailUsuario(artistaInfo.getUsername() + "@ondrasounds.com")
                 .passwordUsuario(passwordEncoder.encode("Artista2025!"))
                 .tipoUsuario(TipoUsuario.ARTISTA)
                 .onboardingCompletado(false)
                 .fechaRegistro(generarFechaRegistro())
                 .activo(true)
-                .slug(artistaInfo.username)
+                .slug(artistaInfo.getUsername())
                 .emailVerificado(true)
                 .permiteGoogle(random.nextBoolean())
                 .build();
@@ -171,12 +171,12 @@ public class DataSeederService implements CommandLineRunner {
      * Genera las redes sociales de un artista.
      */
     private void generarRedesSociales(Artista artista, ArtistaInfo artistaInfo) {
-        for (String plataforma : artistaInfo.redesSociales) {
+        for (String plataforma : artistaInfo.getRedesSociales()) {
             try {
                 RedSocial redSocial = RedSocial.builder()
                         .artista(artista)
                         .tipoRedSocial(TipoRedSocial.valueOf(plataforma))
-                        .urlRedSocial(generarUrlRedSocial(plataforma, artistaInfo.username))
+                        .urlRedSocial(generarUrlRedSocial(plataforma, artistaInfo.getUsername()))
                         .build();
                 redSocialRepository.save(redSocial);
             } catch (IllegalArgumentException e) {

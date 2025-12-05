@@ -1,47 +1,54 @@
 package com.ondra.users.data;
 
+import lombok.Getter;
 import lombok.AllArgsConstructor;
-import lombok.Data;
-import java.util.Arrays;
 import java.util.List;
 
 /**
  * Proporciona datos predefinidos de usuarios y su información básica.
+ * Clase utilitaria que no debe ser instanciada.
  */
-public class UsuariosData {
+public final class UsuariosData {
+
+    /**
+     * Constructor privado para evitar instanciación de clase utilitaria.
+     */
+    private UsuariosData() {
+        throw new UnsupportedOperationException("Esta es una clase utilitaria y no debe ser instanciada");
+    }
 
     /**
      * Contiene la información principal de un usuario.
      */
-    @Data
+    @Getter
     @AllArgsConstructor
     public static class UsuarioInfo {
 
         /**
          * Nombre del usuario.
          */
-        public String nombre;
+        private final String nombre;
 
         /**
          * Apellidos del usuario.
          */
-        public String apellidos;
+        private final String apellidos;
 
         /**
          * Identificador único utilizado en la plataforma.
          */
-        public String username;
+        private final String username;
 
         /**
          * URL de la imagen asociada al usuario.
          */
-        public String urlImagenCompartida;
+        private final String urlImagenCompartida;
     }
 
     /**
      * Lista predefinida de usuarios con datos básicos.
      */
-    public static final List<UsuarioInfo> USUARIOS_PREDEFINIDOS = Arrays.asList(
+    public static final List<UsuarioInfo> USUARIOS_PREDEFINIDOS = List.of(
             new UsuarioInfo(
                     "Ana",
                     "García López",
