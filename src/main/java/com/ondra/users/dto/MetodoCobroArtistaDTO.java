@@ -1,6 +1,5 @@
 package com.ondra.users.dto;
 
-import jakarta.validation.constraints.*;
 import lombok.*;
 
 /**
