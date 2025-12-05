@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Servicio para la generación de slugs únicos.
@@ -127,20 +128,27 @@ public class SlugGeneratorService {
      * Normaliza texto para uso en slugs.
      */
     private String normalizarTexto(String texto) {
-
         if (texto == null || texto.isEmpty()) {
             return "";
         }
 
-        return texto.toLowerCase()
-                .replaceAll("[áàäâ]", "a")
-                .replaceAll("[éèëê]", "e")
-                .replaceAll("[íìïî]", "i")
-                .replaceAll("[óòöô]", "o")
-                .replaceAll("[úùüû]", "u")
-                .replaceAll("ñ", "n")
-                .replaceAll("[çć]", "c")
-                .replaceAll("\\s+", "")
-                .replaceAll("[^a-z0-9]", "");
+        // Reemplazos literales: usamos replace() en lugar de replaceAll()
+        texto = texto.toLowerCase()
+                .replace("ñ", "n")
+                .replace("ç", "c")
+                .replace("ć", "c");
+
+        // Reemplazos que necesitan regex y normalización (CANON_EQ)
+        texto = Pattern.compile("[áàäâ]", Pattern.CANON_EQ).matcher(texto).replaceAll("a");
+        texto = Pattern.compile("[éèëê]", Pattern.CANON_EQ).matcher(texto).replaceAll("e");
+        texto = Pattern.compile("[íìïî]", Pattern.CANON_EQ).matcher(texto).replaceAll("i");
+        texto = Pattern.compile("[óòöô]", Pattern.CANON_EQ).matcher(texto).replaceAll("o");
+        texto = Pattern.compile("[úùüû]", Pattern.CANON_EQ).matcher(texto).replaceAll("u");
+
+        // Reemplazo de espacios y caracteres no alfanuméricos
+        texto = texto.replaceAll("\\s+", ""); // espacios
+        texto = texto.replaceAll("[^a-z0-9]", ""); // caracteres especiales
+
+        return texto;
     }
 }
