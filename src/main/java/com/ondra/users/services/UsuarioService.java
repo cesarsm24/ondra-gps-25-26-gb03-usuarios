@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -44,6 +45,8 @@ public class UsuarioService {
     private final SlugGeneratorService slugGeneratorService;
     private final ContenidosClient contenidosClient;
     private final RecomendacionesClient recomendacionesClient;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     @Value("${google.oauth.client-id}")
     private String googleClientId;
@@ -887,8 +890,7 @@ public class UsuarioService {
      * @return String con código de 6 dígitos
      */
     private String generarCodigoAleatorio() {
-        Random random = new Random();
-        int codigo = 100000 + random.nextInt(900000);
+        int codigo = 100000 + RANDOM.nextInt(900000);
         return String.valueOf(codigo);
     }
 
