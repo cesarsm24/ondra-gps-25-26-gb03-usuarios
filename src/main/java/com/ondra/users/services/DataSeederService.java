@@ -338,15 +338,15 @@ public class DataSeederService implements CommandLineRunner {
     }
 
     private LocalDateTime generarFechaRegistro() {
-        return LocalDateTime.now().minusDays((long) (random.nextInt(730) + 1));
+        return LocalDateTime.now().minusDays(1L + random.nextInt(730));
     }
 
     private LocalDateTime generarFechaInicioArtistico() {
-        return LocalDateTime.now().minusDays((long) (random.nextInt(1825) + 1));
+        return LocalDateTime.now().minusDays(1L + random.nextInt(1825));
     }
 
     private LocalDateTime generarFechaSeguimiento() {
-        return LocalDateTime.now().minusDays((long) (random.nextInt(365) + 1));
+        return LocalDateTime.now().minusDays(1L + random.nextInt(365));
     }
 
     private String generarNumeroTarjeta() {
