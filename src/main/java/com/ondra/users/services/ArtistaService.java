@@ -77,7 +77,7 @@ public class ArtistaService {
 
         return artistas.stream()
                 .map(this::convertirADTO)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -595,7 +595,7 @@ public class ArtistaService {
                         .tipoRedSocial(red.getTipoRedSocial().name().toLowerCase())
                         .urlRedSocial(red.getUrlRedSocial())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
 
         return ArtistaDTO.builder()
                 .idArtista(artista.getIdArtista())
