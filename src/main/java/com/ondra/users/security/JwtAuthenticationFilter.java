@@ -11,7 +11,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -23,33 +22,37 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Filtro encargado de la validación de tokens JWT en las peticiones protegidas.
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Value("${jwt.secret}")
     private String secretKey;
-    
-    private static final String PUBLIC_API_PATH = "/api/public/";
 
-    private static final String[] PUBLIC_PATTERNS = {
-            "/api/usuarios/login",
-            "/api/usuarios/login/google",
-            "/api/usuarios/refresh",
-            "/api/usuarios/logout",
-            "/api/usuarios/recuperar-password",
-            "/api/usuarios/restablecer-password",
-            "/api/usuarios/verificar-email",
-            "/api/usuarios/reenviar-verificacion",
-            PUBLIC_API_PATH,
-            "/actuator/health"
-    };
+    @Value("${security.public.path:/api/public/}")
+    private String publicApiPath;
+
+    @Value("${security.public.endpoints}")
+    private List<String> publicEndpoints;
+
+    @Value("${security.user.registration.path:/api/usuarios}")
+    private String userRegistrationPath;
+
+    @Value("${security.user.stats.path:/api/usuarios/stats}")
+    private String userStatsPath;
+
+    @Value("${security.artist.base.path:/api/artistas}")
+    private String artistBasePath;
+
+    @Value("${security.follow.base.path:/api/seguimientos}")
+    private String followBasePath;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -68,7 +71,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isPostUserRegistration(String method, String path) {
-        return "POST".equals(method) && path.equals("/api/usuarios");
+        return "POST".equals(method) && path.equals(userRegistrationPath);
     }
 
     private boolean isPublicGetEndpoint(String method, String path) {
@@ -76,35 +79,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return false;
         }
 
-        return path.equals("/api/usuarios/stats")
-                || path.startsWith(PUBLIC_API_PATH)
+        return path.equals(userStatsPath)
+                || path.startsWith(publicApiPath)
                 || isPublicArtistEndpoint(path)
                 || isPublicFollowEndpoint(path);
     }
 
     private boolean isPublicArtistEndpoint(String path) {
-        return path.equals("/api/artistas")
-                || path.startsWith("/api/artistas?")
-                || path.matches("/api/artistas/\\d+/?$")
-                || path.matches("/api/artistas/\\d+/redes");
+        return path.equals(artistBasePath)
+                || path.startsWith(artistBasePath + "?")
+                || path.matches(artistBasePath + "/\\d+/?$")
+                || path.matches(artistBasePath + "/\\d+/redes");
     }
 
     private boolean isPublicFollowEndpoint(String path) {
-        return path.matches("/api/seguimientos/\\d+/seguidos")
-                || path.matches("/api/seguimientos/\\d+/seguidores")
-                || path.matches("/api/seguimientos/\\d+/estadisticas");
+        return path.matches(followBasePath + "/\\d+/seguidos")
+                || path.matches(followBasePath + "/\\d+/seguidores")
+                || path.matches(followBasePath + "/\\d+/estadisticas");
     }
 
     private boolean isPublicEndpoint(String path) {
-        return path.equals("/api/usuarios/login")
-                || path.equals("/api/usuarios/login/google")
-                || path.equals("/api/usuarios/refresh")
-                || path.equals("/api/usuarios/recuperar-password")
-                || path.equals("/api/usuarios/restablecer-password")
-                || path.startsWith("/api/usuarios/verificar-email")
-                || path.equals("/api/usuarios/reenviar-verificacion")
-                || path.startsWith(PUBLIC_API_PATH)
-                || path.equals("/actuator/health");
+        return publicEndpoints.stream().anyMatch(path::startsWith)
+                || path.startsWith(publicApiPath);
     }
 
     @Override
@@ -164,7 +160,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private String extractTokenFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
-        // Solución Code Smell 3: Simplificar con return directo
         return (bearerToken != null && bearerToken.startsWith("Bearer "))
                 ? bearerToken.substring(7)
                 : null;
