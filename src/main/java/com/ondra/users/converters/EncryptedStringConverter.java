@@ -3,7 +3,6 @@ package com.ondra.users.converters;
 import com.ondra.users.services.EncryptionService;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,18 +22,15 @@ import org.springframework.stereotype.Component;
 @Converter
 public class EncryptedStringConverter implements AttributeConverter<String, String> {
 
-    private static EncryptionService encryptionService;
+    private final EncryptionService encryptionService;
 
     /**
-     * Inyecta el servicio de cifrado mediante setter.
+     * Constructor que inyecta el servicio de cifrado.
      *
-     * <p>Utiliza inyección estática para compatibilidad con JPA.</p>
-     *
-     * @param service Servicio de cifrado
+     * @param encryptionService Servicio de cifrado
      */
-    @Autowired
-    public void setEncryptionService(EncryptionService service) {
-        EncryptedStringConverter.encryptionService = service;
+    public EncryptedStringConverter(EncryptionService encryptionService) {
+        this.encryptionService = encryptionService;
     }
 
     /**
