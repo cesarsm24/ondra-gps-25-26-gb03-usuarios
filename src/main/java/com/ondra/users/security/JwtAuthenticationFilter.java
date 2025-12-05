@@ -27,13 +27,6 @@ import java.util.Collections;
 
 /**
  * Filtro encargado de la validación de tokens JWT en las peticiones protegidas.
- *
- * <p>Analiza el encabezado Authorization de cada solicitud, extrae el token,
- * lo valida y, en caso de ser correcto, establece el contexto de autenticación
- * en Spring Security.</p>
- *
- * <p>Las rutas públicas definidas en {@link #shouldNotFilter(HttpServletRequest)}
- * quedan excluidas del proceso de validación.</p>
  */
 @Slf4j
 @Component
@@ -42,6 +35,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Value("${jwt.secret}")
     private String secretKey;
+    
+    private static final String PUBLIC_API_PATH = "/api/public/";
 
     private static final String[] PUBLIC_PATTERNS = {
             "/api/usuarios/login",
@@ -52,78 +47,66 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/usuarios/restablecer-password",
             "/api/usuarios/verificar-email",
             "/api/usuarios/reenviar-verificacion",
-            "/api/public/",
+            PUBLIC_API_PATH,
             "/actuator/health"
     };
 
-    /**
-     * Determina si una petición debe omitirse del proceso de validación JWT.
-     *
-     * @param request petición HTTP
-     * @return true si la ruta es pública, false en caso contrario
-     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        if ("POST".equals(method) && path.equals("/api/usuarios")) {
+        if (isPostUserRegistration(method, path)) {
             return true;
         }
 
-        if ("GET".equals(method)) {
-            if (path.equals("/api/usuarios/stats")) {
-                return true;
-            }
-
-            if (path.startsWith("/api/public/")) {
-                return true;
-            }
-
-            if (path.equals("/api/artistas") || path.startsWith("/api/artistas?")) {
-                return true;
-            }
-
-            if (path.matches("/api/artistas/\\d+/?$")) {
-                return true;
-            }
-
-            if (path.matches("/api/artistas/\\d+/redes")) {
-                return true;
-            }
-
-            if (path.matches("/api/seguimientos/\\d+/seguidos")
-                    || path.matches("/api/seguimientos/\\d+/seguidores")
-                    || path.matches("/api/seguimientos/\\d+/estadisticas")) {
-                return true;
-            }
-        }
-
-        if (path.equals("/api/usuarios/login") ||
-                path.equals("/api/usuarios/login/google") ||
-                path.equals("/api/usuarios/refresh") ||
-                path.equals("/api/usuarios/recuperar-password") ||
-                path.equals("/api/usuarios/restablecer-password") ||
-                path.startsWith("/api/usuarios/verificar-email") ||
-                path.equals("/api/usuarios/reenviar-verificacion") ||
-                path.startsWith("/api/public/") ||
-                path.equals("/actuator/health")) {
+        if (isPublicGetEndpoint(method, path)) {
             return true;
         }
 
-        return false;
+        return isPublicEndpoint(path);
     }
 
-    /**
-     * Procesa la validación del token JWT y establece la autenticación en el contexto
-     * de seguridad cuando el token es válido.
-     *
-     * @param request petición HTTP
-     * @param response respuesta HTTP
-     * @param filterChain cadena de filtros de Spring Security
-     * @throws ServletException si ocurre un error en el procesamiento del filtro
-     * @throws IOException si ocurre un error de entrada/salida
-     */
+    private boolean isPostUserRegistration(String method, String path) {
+        return "POST".equals(method) && path.equals("/api/usuarios");
+    }
+
+    private boolean isPublicGetEndpoint(String method, String path) {
+        if (!"GET".equals(method)) {
+            return false;
+        }
+
+        return path.equals("/api/usuarios/stats")
+                || path.startsWith(PUBLIC_API_PATH)
+                || isPublicArtistEndpoint(path)
+                || isPublicFollowEndpoint(path);
+    }
+
+    private boolean isPublicArtistEndpoint(String path) {
+        return path.equals("/api/artistas")
+                || path.startsWith("/api/artistas?")
+                || path.matches("/api/artistas/\\d+/?$")
+                || path.matches("/api/artistas/\\d+/redes");
+    }
+
+    private boolean isPublicFollowEndpoint(String path) {
+        return path.matches("/api/seguimientos/\\d+/seguidos")
+                || path.matches("/api/seguimientos/\\d+/seguidores")
+                || path.matches("/api/seguimientos/\\d+/estadisticas");
+    }
+
+    private boolean isPublicEndpoint(String path) {
+        return path.equals("/api/usuarios/login")
+                || path.equals("/api/usuarios/login/google")
+                || path.equals("/api/usuarios/refresh")
+                || path.equals("/api/usuarios/recuperar-password")
+                || path.equals("/api/usuarios/restablecer-password")
+                || path.startsWith("/api/usuarios/verificar-email")
+                || path.equals("/api/usuarios/reenviar-verificacion")
+                || path.startsWith(PUBLIC_API_PATH)
+                || path.equals("/actuator/health");
+    }
+
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -179,29 +162,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    /**
-     * Extrae el token JWT del encabezado Authorization.
-     *
-     * @param request petición HTTP
-     * @return token sin el prefijo "Bearer ", o null si no está presente
-     */
     private String extractTokenFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
+        // Solución Code Smell 3: Simplificar con return directo
+        return (bearerToken != null && bearerToken.startsWith("Bearer "))
+                ? bearerToken.substring(7)
+                : null;
     }
 
-    /**
-     * Valida la firma y estructura del token proporcionado.
-     *
-     * @param token token JWT
-     * @return true si el token es válido
-     * @throws ExpiredJwtException si el token ha expirado
-     * @throws SignatureException si la firma es incorrecta
-     * @throws MalformedJwtException si el token tiene un formato inválido
-     */
     private boolean validateToken(String token) {
         Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -210,13 +178,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return true;
     }
 
-    /**
-     * Obtiene el identificador de usuario incluido en el token.
-     *
-     * @param token token JWT validado
-     * @return identificador del usuario
-     * @throws IllegalArgumentException si no existe el campo userId
-     */
     private String extractUserIdFromToken(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -232,48 +193,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return String.valueOf(userIdObj);
     }
 
-    /**
-     * Obtiene el identificador del artista incluido en el token.
-     *
-     * @param token token JWT validado
-     * @return identificador del artista
-     * @throws IllegalArgumentException si no existe el campo artistId
-     */
-    private String extractArtistIdFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-
-        Object artistIdObj = claims.get("artistId");
-
-        if (artistIdObj == null) {
-            throw new IllegalArgumentException("El token no contiene el campo artistId");
-        }
-
-        return String.valueOf(artistIdObj);
-    }
-
-    /**
-     * Genera la clave secreta utilizada para validar la firma de los tokens JWT.
-     *
-     * @return clave secreta HMAC
-     */
     private SecretKey getSigningKey() {
         byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /**
-     * Envía una respuesta de error en formato JSON.
-     *
-     * @param response respuesta HTTP
-     * @param status código de estado HTTP
-     * @param error código de error
-     * @param message mensaje descriptivo
-     * @throws IOException si ocurre un error al escribir la respuesta
-     */
     private void writeErrorResponse(HttpServletResponse response, int status,
                                     String error, String message) throws IOException {
         response.setStatus(status);
