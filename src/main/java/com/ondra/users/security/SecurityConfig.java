@@ -68,6 +68,12 @@ public class SecurityConfig {
     @Value("${cors.max-age:3600}")
     private Long corsMaxAge;
 
+    // Path patterns - Solución Code Smell: literal "/{id}" duplicado
+    private static final String PATH_ID = "/{id}";
+    private static final String PATH_ID_USUARIO = "/{idUsuario}";
+    private static final String PATH_ID_RED = "/{id_red}";
+    private static final String PATH_WILDCARD = "/**";
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -110,7 +116,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, apiUsuarios + "/logout").permitAll()
 
                         // Endpoints internos - Solo para microservicios
-                        .requestMatchers(apiInternal + "/**").hasRole(roleService)
+                        .requestMatchers(apiInternal + PATH_WILDCARD).hasRole(roleService)
                         .requestMatchers(HttpMethod.GET, apiUsuarios + "/*/datos-usuario").hasRole(roleService)
                         .requestMatchers(HttpMethod.GET, apiUsuarios + "/*/existe").hasRole(roleService)
 
@@ -123,47 +129,47 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, apiUsuarios + "/reenviar-verificacion").permitAll()
 
                         // Endpoints públicos generales
-                        .requestMatchers(HttpMethod.GET, apiPublic + "/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, apiPublic + PATH_WILDCARD).permitAll()
 
                         // Artistas - Consultas públicas
                         .requestMatchers(HttpMethod.GET, apiArtistas).permitAll()
-                        .requestMatchers(HttpMethod.GET, apiArtistas + "/{id}").permitAll()
-                        .requestMatchers(HttpMethod.GET, apiArtistas + "/{id}/redes").permitAll()
+                        .requestMatchers(HttpMethod.GET, apiArtistas + PATH_ID).permitAll()
+                        .requestMatchers(HttpMethod.GET, apiArtistas + PATH_ID + "/redes").permitAll()
 
                         // Artistas - Métodos de cobro (requieren autenticación)
-                        .requestMatchers(apiArtistas + "/{id}/metodos-cobro/**").authenticated()
+                        .requestMatchers(apiArtistas + PATH_ID + "/metodos-cobro" + PATH_WILDCARD).authenticated()
 
                         // Artistas - Redes sociales (requieren autenticación)
-                        .requestMatchers(HttpMethod.POST, apiArtistas + "/{id}/redes").authenticated()
-                        .requestMatchers(HttpMethod.PUT, apiArtistas + "/{id}/redes/{id_red}").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, apiArtistas + "/{id}/redes/{id_red}").authenticated()
+                        .requestMatchers(HttpMethod.POST, apiArtistas + PATH_ID + "/redes").authenticated()
+                        .requestMatchers(HttpMethod.PUT, apiArtistas + PATH_ID + "/redes" + PATH_ID_RED).authenticated()
+                        .requestMatchers(HttpMethod.DELETE, apiArtistas + PATH_ID + "/redes" + PATH_ID_RED).authenticated()
 
                         // Artistas - Gestión (requieren autenticación)
                         .requestMatchers(HttpMethod.POST, apiArtistas).authenticated()
-                        .requestMatchers(HttpMethod.PUT, apiArtistas + "/{id}").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, apiArtistas + "/{id}").authenticated()
-                        .requestMatchers(HttpMethod.POST, apiArtistas + "/{id}/renunciar").authenticated()
+                        .requestMatchers(HttpMethod.PUT, apiArtistas + PATH_ID).authenticated()
+                        .requestMatchers(HttpMethod.DELETE, apiArtistas + PATH_ID).authenticated()
+                        .requestMatchers(HttpMethod.POST, apiArtistas + PATH_ID + "/renunciar").authenticated()
 
                         // Usuarios - Métodos de pago (requieren autenticación)
-                        .requestMatchers(apiUsuarios + "/{id}/metodos-pago/**").authenticated()
+                        .requestMatchers(apiUsuarios + PATH_ID + "/metodos-pago" + PATH_WILDCARD).authenticated()
 
                         // Usuarios - Gestión de perfil (requieren autenticación)
-                        .requestMatchers(HttpMethod.GET, apiUsuarios + "/{id}").authenticated()
-                        .requestMatchers(HttpMethod.PUT, apiUsuarios + "/{id}").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, apiUsuarios + "/{id}").authenticated()
-                        .requestMatchers(HttpMethod.PATCH, apiUsuarios + "/{id}/onboarding-completado").authenticated()
-                        .requestMatchers(HttpMethod.PUT, apiUsuarios + "/{id}/cambiar-password").authenticated()
+                        .requestMatchers(HttpMethod.GET, apiUsuarios + PATH_ID).authenticated()
+                        .requestMatchers(HttpMethod.PUT, apiUsuarios + PATH_ID).authenticated()
+                        .requestMatchers(HttpMethod.DELETE, apiUsuarios + PATH_ID).authenticated()
+                        .requestMatchers(HttpMethod.PATCH, apiUsuarios + PATH_ID + "/onboarding-completado").authenticated()
+                        .requestMatchers(HttpMethod.PUT, apiUsuarios + PATH_ID + "/cambiar-password").authenticated()
                         .requestMatchers(HttpMethod.POST, apiUsuarios + "/logout-all").authenticated()
 
                         // Seguimientos - Consultas públicas
-                        .requestMatchers(HttpMethod.GET, apiSeguimientos + "/{idUsuario}/seguidos").permitAll()
-                        .requestMatchers(HttpMethod.GET, apiSeguimientos + "/{idUsuario}/seguidores").permitAll()
-                        .requestMatchers(HttpMethod.GET, apiSeguimientos + "/{idUsuario}/estadisticas").permitAll()
+                        .requestMatchers(HttpMethod.GET, apiSeguimientos + PATH_ID_USUARIO + "/seguidos").permitAll()
+                        .requestMatchers(HttpMethod.GET, apiSeguimientos + PATH_ID_USUARIO + "/seguidores").permitAll()
+                        .requestMatchers(HttpMethod.GET, apiSeguimientos + PATH_ID_USUARIO + "/estadisticas").permitAll()
 
                         // Seguimientos - Acciones (requieren autenticación)
                         .requestMatchers(HttpMethod.POST, apiSeguimientos).authenticated()
-                        .requestMatchers(HttpMethod.DELETE, apiSeguimientos + "/{idUsuario}").authenticated()
-                        .requestMatchers(HttpMethod.GET, apiSeguimientos + "/{idUsuario}/verificar").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, apiSeguimientos + PATH_ID_USUARIO).authenticated()
+                        .requestMatchers(HttpMethod.GET, apiSeguimientos + PATH_ID_USUARIO + "/verificar").authenticated()
 
                         // Actuator
                         .requestMatchers(HttpMethod.GET, apiActuator + "/health").permitAll()

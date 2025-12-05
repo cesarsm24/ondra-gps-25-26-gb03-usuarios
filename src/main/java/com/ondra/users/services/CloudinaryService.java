@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,11 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class CloudinaryService {
+
+    private static final String PATH_SEPARATOR = "/";
+    private static final String UPLOAD_SEGMENT = "/upload/";
+    private static final int UPLOAD_SEGMENT_LENGTH = 8;
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024L; // 5MB
 
     private final Cloudinary cloudinary;
 
@@ -73,11 +79,12 @@ public class CloudinaryService {
 
         try {
             String publicId = generarPublicId();
-            String folderPath = folder + "/" + carpeta;
+            String folderPath = construirRutaCarpeta(carpeta);
 
             log.debug("Subiendo imagen con public_id: {} a carpeta: {}", publicId, folderPath);
 
-            Map uploadResult = cloudinary.uploader().upload(file.getBytes(),
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(
+                    file.getBytes(),
                     ObjectUtils.asMap(
                             "public_id", publicId,
                             "folder", folderPath,
@@ -87,10 +94,12 @@ public class CloudinaryService {
                                     .width(500).height(500)
                                     .crop("fill")
                                     .quality("auto")
-                    ));
+                    )
+            );
 
             String secureUrl = (String) uploadResult.get("secure_url");
             log.info("✅ Imagen subida exitosamente: {}", secureUrl);
+
             return secureUrl;
 
         } catch (IOException e) {
@@ -123,17 +132,25 @@ public class CloudinaryService {
         try {
             log.debug("Eliminando imagen con public_id: {}", publicId);
 
-            Map result = cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+            Map<String, Object> result = cloudinary.uploader().destroy(
+                    publicId,
+                    ObjectUtils.emptyMap()
+            );
+
             String resultStatus = (String) result.get("result");
 
             if ("ok".equals(resultStatus)) {
                 log.info("✅ Imagen eliminada: {}", publicId);
             } else {
-                log.warn("⚠️ Resultado inesperado al eliminar: {} - Status: {}", publicId, resultStatus);
+                log.warn("⚠️ Resultado inesperado al eliminar: {} - Status: {}",
+                        publicId, resultStatus);
             }
+
         } catch (IOException e) {
             log.error("❌ Error al eliminar imagen: {}", e.getMessage(), e);
-            throw new ImageDeletionFailedException("Error al eliminar la imagen de Cloudinary", e);
+            throw new ImageDeletionFailedException(
+                    "Error al eliminar la imagen de Cloudinary", e
+            );
         }
     }
 
@@ -148,23 +165,23 @@ public class CloudinaryService {
      */
     private String extraerPublicId(String imageUrl) {
         try {
-            int uploadIndex = imageUrl.indexOf("/upload/");
+            int uploadIndex = imageUrl.indexOf(UPLOAD_SEGMENT);
             if (uploadIndex == -1) {
                 log.warn("URL no contiene '/upload/': {}", imageUrl);
                 return null;
             }
 
-            String afterUpload = imageUrl.substring(uploadIndex + 8);
+            String afterUpload = imageUrl.substring(uploadIndex + UPLOAD_SEGMENT_LENGTH);
+            int versionEnd = afterUpload.indexOf(PATH_SEPARATOR);
 
-            int versionEnd = afterUpload.indexOf("/");
             if (versionEnd == -1) {
                 log.warn("URL sin formato de versión: {}", imageUrl);
                 return null;
             }
 
             String pathWithExtension = afterUpload.substring(versionEnd + 1);
-
             int lastDot = pathWithExtension.lastIndexOf(".");
+
             String publicId = lastDot != -1
                     ? pathWithExtension.substring(0, lastDot)
                     : pathWithExtension;
@@ -218,8 +235,7 @@ public class CloudinaryService {
      * @return true si el tamaño no excede 5MB
      */
     public boolean esTamanoValido(MultipartFile file) {
-        long maxSize = 5 * 1024 * 1024L;
-        return file != null && file.getSize() <= maxSize;
+        return file != null && file.getSize() <= MAX_FILE_SIZE;
     }
 
     /**
@@ -232,7 +248,7 @@ public class CloudinaryService {
      * @return número de imágenes eliminadas
      */
     public int limpiarCarpeta(String carpeta) {
-        String folderPath = folder + "/" + carpeta;
+        String folderPath = construirRutaCarpeta(carpeta);
         int imagenesEliminadas = 0;
 
         try {
@@ -243,9 +259,11 @@ public class CloudinaryService {
                             "type", "upload",
                             "prefix", folderPath,
                             "max_results", 500
-                    ));
+                    )
+            );
 
-            List<Map> resources = (List<Map>) result.get("resources");
+            List<Map<String, Object>> resources =
+                    (List<Map<String, Object>>) result.get("resources");
 
             if (resources == null || resources.isEmpty()) {
                 log.info("No se encontraron imágenes en: {}", folderPath);
@@ -254,23 +272,48 @@ public class CloudinaryService {
 
             log.info("📦 Imágenes encontradas: {}", resources.size());
 
-            for (Map resource : resources) {
-                String publicId = (String) resource.get("public_id");
-                try {
-                    cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
-                    imagenesEliminadas++;
-                    log.debug("🗑️ Imagen eliminada: {}", publicId);
-                } catch (Exception e) {
-                    log.warn("⚠️ No se pudo eliminar: {} - Error: {}", publicId, e.getMessage());
-                }
+            for (Map<String, Object> resource : resources) {
+                imagenesEliminadas += eliminarRecurso(resource);
             }
 
             log.info("✅ Limpieza completada: {} imágenes eliminadas", imagenesEliminadas);
 
         } catch (Exception e) {
-            log.error("❌ Error durante limpieza de carpeta {}: {}", folderPath, e.getMessage(), e);
+            log.error("❌ Error durante limpieza de carpeta {}: {}",
+                    folderPath, e.getMessage(), e);
         }
 
         return imagenesEliminadas;
+    }
+
+    /**
+     * Elimina un recurso individual durante la limpieza de carpeta.
+     *
+     * @param resource mapa con información del recurso
+     * @return 1 si se eliminó correctamente, 0 en caso contrario
+     */
+    private int eliminarRecurso(Map<String, Object> resource) {
+        String publicId = (String) resource.get("public_id");
+
+        try {
+            cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+            log.debug("🗑️ Imagen eliminada: {}", publicId);
+            return 1;
+
+        } catch (Exception e) {
+            log.warn("⚠️ No se pudo eliminar: {} - Error: {}",
+                    publicId, e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Construye la ruta completa de la carpeta concatenando el folder base con la subcarpeta.
+     *
+     * @param carpeta subcarpeta destino
+     * @return ruta completa de la carpeta
+     */
+    private String construirRutaCarpeta(String carpeta) {
+        return folder + PATH_SEPARATOR + carpeta;
     }
 }
