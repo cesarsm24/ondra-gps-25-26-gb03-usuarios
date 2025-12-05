@@ -50,8 +50,6 @@ public class ImagenController {
             @RequestParam("file") MultipartFile file,
             Authentication authentication) {
 
-        Long authenticatedUserId = Long.parseLong(authentication.getName());
-
         String imageUrl = cloudinaryService.subirImagen(file, "usuarios");
 
         ImagenResponseDTO response = ImagenResponseDTO.builder()
@@ -83,8 +81,6 @@ public class ImagenController {
             @RequestParam("file") MultipartFile file,
             Authentication authentication) {
 
-        Long authenticatedUserId = Long.parseLong(authentication.getName());
-
         String imageUrl = cloudinaryService.subirImagen(file, "artistas");
 
         ImagenResponseDTO response = ImagenResponseDTO.builder()
@@ -110,8 +106,6 @@ public class ImagenController {
     public ResponseEntity<SuccessfulResponseDTO> eliminarImagen(
             @RequestParam("url") String imageUrl,
             Authentication authentication) {
-
-        Long authenticatedUserId = Long.parseLong(authentication.getName());
 
         cloudinaryService.eliminarImagen(imageUrl);
 
