@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.security.SecureRandom;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -38,7 +39,7 @@ public class DataSeederService implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
 
     // Instancia única de Random para toda la clase
-    private final Random random = new Random();
+    private final SecureRandom random = new SecureRandom();
 
     private static final String[] PAYMENT_TYPES = {"TARJETA", "TRANSFERENCIA", "PAYPAL", "BIZUM"};
     private static final String[] COBRO_TYPES = {"TRANSFERENCIA", "PAYPAL", "BIZUM"};
